@@ -42,6 +42,7 @@ component ``data`` object.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import re
@@ -147,6 +148,15 @@ class SchemaViolation(BaseModel):
 class EnforcementResult(BaseModel):
     data: JSONDict
     violations: List[SchemaViolation] = Field(default_factory=list)
+
+
+#: The signed member that records what the filter altered (CC 3.1.5: a signed record is never silently altered).
+#: Each entry: ``path``, ``kind`` (``truncated`` | ``dropped_wrong_type`` | ``dropped_not_in_schema``),
+#: ``original_length`` and, for a cut of an allowed value only, ``sha256`` of the original. A dropped value gets no
+#: hash: it was content in the wrong place (a name in a token field), and a hash of it could be confirmed by
+#: guessing. A field above the trace level is not an alteration (the level mechanism) and is not recorded.
+ALTERATIONS_FIELD = "egress_alterations"
+ALTERATIONS_MAX = 64
 
 
 # ---------------------------------------------------------------------------
@@ -654,8 +664,33 @@ class _Enforcer:
         self.event_type = event_type
         self.level = level
         self.violations: List[SchemaViolation] = []
+        self.alterations: List[JSONDict] = []
+
+    def _record_alteration(self, path: str, kind: ViolationKind, value: object, why: str) -> None:
+        if kind == ViolationKind.UNEXPECTED_FIELD and not why.startswith("not in schema"):
+            return  # above this level: the level mechanism, not an alteration
+        label = {
+            ViolationKind.OVER_CAP: "truncated",
+            ViolationKind.WRONG_TYPE: "dropped_wrong_type",
+            ViolationKind.UNEXPECTED_FIELD: "dropped_not_in_schema",
+        }[kind]
+        entry: JSONDict = {"path": path[:LABEL_MAX_CHARS * 2], "kind": label}
+        if isinstance(value, (str, list, tuple, dict)):
+            entry["original_length"] = len(value)
+        if kind == ViolationKind.OVER_CAP:
+            if isinstance(value, str):
+                raw = value.encode("utf-8")
+            else:
+                import json as _json
+
+                raw = _json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode(
+                    "utf-8"
+                )
+            entry["sha256"] = hashlib.sha256(raw).hexdigest()
+        self.alterations.append(entry)
 
     def _flag(self, path: str, kind: ViolationKind, value: object, why: str) -> None:
+        self._record_alteration(path, kind, value, why)
         self.violations.append(
             SchemaViolation(
                 event_type=self.event_type,
@@ -827,6 +862,25 @@ class _Enforcer:
         return None
 
 
+#: The alterations member, listed on every event so the published schema documents it. It is written by
+#: enforce_egress_schema itself; a producer's own ``egress_alterations`` is discarded before filtering.
+ALTERATIONS_SPEC = _list(
+    _obj(
+        {
+            "path": _label(G, LABEL_MAX_CHARS * 2),
+            "kind": _tok(),
+            "original_length": _int(),
+            "sha256": _tok(),
+        },
+        G,
+    ),
+    G,
+    max_items=ALTERATIONS_MAX + 1,
+)
+for _event_fields in list(EVENT_SCHEMAS.values()) + [FALLBACK_SCHEMA]:
+    _event_fields[ALTERATIONS_FIELD] = ALTERATIONS_SPEC
+
+
 def schema_for(event_type: str) -> Dict[str, FieldSpec]:
     return EVENT_SCHEMAS.get(event_type, FALLBACK_SCHEMA)
 
@@ -834,7 +888,13 @@ def schema_for(event_type: str) -> Dict[str, FieldSpec]:
 def enforce_egress_schema(event_type: str, level: TraceLevel, data: Mapping[str, object]) -> EnforcementResult:
     """Filter ``data`` to what ``level`` allows for ``event_type``. Pure; does not log."""
     enforcer = _Enforcer(event_type, level)
-    cleaned = enforcer.fields(schema_for(event_type), data, "")
+    cleaned = enforcer.fields(schema_for(event_type), {k: v for k, v in data.items() if k != ALTERATIONS_FIELD}, "")
+    if enforcer.alterations:
+        marks = enforcer.alterations[:ALTERATIONS_MAX]
+        if len(enforcer.alterations) > ALTERATIONS_MAX:
+            marks.append({"path": "*", "kind": "more", "original_length": len(enforcer.alterations) - ALTERATIONS_MAX})
+        # In `data`, so the signature covers it: the signed record says what was cut, never silently altered.
+        cleaned[ALTERATIONS_FIELD] = marks  # type: ignore[assignment]
     return EnforcementResult(data=cleaned, violations=enforcer.violations)
 
 

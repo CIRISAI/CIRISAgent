@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://ciris.ai/schemas/trace_format_v3.1.0.json",
   "title": "CIRIS Reasoning Trace v3.1.0",
-  "description": "Complete reasoning trace from the CIRIS H3ERE pipeline (FSD/TRACE_WIRE_FORMAT.md). 3.1.0 adds the LLM_CALL context_manifest member (§5.10.1). Stamped by lens-core at seal time from server 0.6 / persist v62.0; the LlmCallData and ContextManifest definitions are generated from the egress schema (egress_schema.json_schema_for) and compared to it by test.",
+  "description": "Complete reasoning trace from the CIRIS H3ERE pipeline (FSD/TRACE_WIRE_FORMAT.md). 3.1.0 adds the LLM_CALL context_manifest member (§5.10.1). Stamped by lens-core at seal time from server 0.6 / persist v62.0; the LlmCallData and ContextManifest definitions are generated from the egress schema (tools/dev/gen_trace_format_schema.py) and compared to it by test.",
   "type": "object",
   "required": [
     "trace_id",
@@ -144,7 +144,7 @@
         },
         "agent_id_hash": {
           "type": "string",
-          "description": "Denormalized from the envelope (2.7.9+); MUST equal the trace's agent_id_hash"
+          "description": "sha256(signer pubkey)[:16], denormalized from the envelope; MUST equal the trace's"
         }
       }
     },
@@ -2138,11 +2138,113 @@
           "maxLength": 65536,
           "x-ciris-min-level": "full_traces"
         },
+        "egress_alterations": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 256,
+                "x-ciris-min-level": "generic"
+              },
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64,
+                "x-ciris-min-level": "generic"
+              },
+              "original_length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "x-ciris-min-level": "generic"
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64,
+                "x-ciris-min-level": "generic"
+              }
+            },
+            "x-ciris-min-level": "generic"
+          },
+          "maxItems": 65,
+          "x-ciris-min-level": "generic"
+        },
         "context_manifest": {
           "$ref": "#/definitions/ContextManifest",
           "x-ciris-min-level": "detailed"
         }
       }
+    },
+    "EgressAlterations": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256,
+            "x-ciris-min-level": "generic"
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "generic"
+          },
+          "original_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-ciris-min-level": "generic"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "generic"
+          }
+        },
+        "x-ciris-min-level": "generic"
+      },
+      "maxItems": 65,
+      "x-ciris-min-level": "generic"
     }
   }
 }

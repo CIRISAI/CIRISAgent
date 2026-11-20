@@ -269,16 +269,19 @@ def _published() -> Dict[str, Any]:
 
 
 def test_the_published_llm_call_and_context_manifest_match_the_enforced_egress_schema() -> None:
-    """One source: trace_format_v3_1_0.json's definitions are what egress_schema enforces."""
-    published = _published()["definitions"]
-    generated = egress_schema.json_schema_for(egress_schema.EVENT_SCHEMAS["LLM_CALL"])
-    cm = generated["properties"].pop("context_manifest")
-    expected_cm = {k: v for k, v in cm.items() if k not in ("type", "x-ciris-min-level")}
-    expected_cm["type"] = "object"
-    generated["properties"]["context_manifest"] = {"$ref": "#/definitions/ContextManifest", "x-ciris-min-level": "detailed"}
-    assert published["ContextManifest"] == expected_cm
-    assert published["LlmCallData"] == generated
+    """One source: trace_format_v3_1_0.json is exactly what tools/dev/gen_trace_format_schema.py renders from the
+    enforced egress schema. Regenerate with that script when the egress schema changes."""
+    import importlib.util
 
+    script = SCHEMA_PATH.parents[3] / "tools" / "dev" / "gen_trace_format_schema.py"
+    spec = importlib.util.spec_from_file_location("gen_trace_format_schema", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert SCHEMA_PATH.read_text(encoding="utf-8") == module.render()
+    assert _published()["definitions"]["LlmCallData"]["properties"]["context_manifest"]["$ref"] == (
+        "#/definitions/ContextManifest"
+    )
 
 def test_a_shipped_context_manifest_validates_against_the_published_schema(pseudonymizer: SubjectPseudonymizer) -> None:
     jsonschema = pytest.importorskip("jsonschema")

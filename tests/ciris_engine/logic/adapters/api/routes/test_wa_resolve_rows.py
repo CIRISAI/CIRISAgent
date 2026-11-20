@@ -163,6 +163,8 @@ async def test_a_deferral_without_a_request_row_is_not_resolved(monkeypatch: pyt
     with pytest.raises(HTTPException) as caught:
         await h.resolve()
     assert caught.value.status_code == 409
+    # A client keys its message on the reason id, not the prose (CIRISClient WA screen).
+    assert caught.value.detail["error"]["details"]["reason_id"] == "wa.no_signed_request_row"
     assert node.calls_to("emit_deferral_response") == []
     assert "resolve_deferral" not in h.order
 

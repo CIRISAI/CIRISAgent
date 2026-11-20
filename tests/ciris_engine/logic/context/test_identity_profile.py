@@ -251,7 +251,7 @@ async def test_the_loader_reads_refs_prev_and_the_base_link_from_the_signed_rows
 
 def _signed_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verifies: bool = True) -> None:
     """A copy of the shipped manifest under a fake root-WA hybrid signature, with a directory record."""
-    manifest_bytes = (Path(ip.MANIFEST_DIRS[1]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes()
+    manifest_bytes = (Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes()
     (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes(manifest_bytes)
     (tmp_path / ip.TEMPLATE_MANIFEST_SIGNATURE_FILE).write_text(
         json.dumps(
@@ -325,7 +325,7 @@ def test_a_base_row_still_wins_over_the_derived_base(monkeypatch: pytest.MonkeyP
 
 
 def test_an_unsigned_or_custom_template_still_asks_a_wise_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[1]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
+    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
     monkeypatch.setattr(ip, "MANIFEST_DIRS", (tmp_path,))
     _, profile = ip.check_identity_profile(_base_of("default"), [])
     assert profile.status == IdentityProfileStatus.UNANCHORED
@@ -346,7 +346,7 @@ def test_a_manifest_edited_after_signing_is_not_verified(monkeypatch: pytest.Mon
 
 
 def test_today_the_manifest_has_no_root_wa_hybrid_signature(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[1]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
+    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
     monkeypatch.setattr(ip, "MANIFEST_DIRS", (tmp_path,))
     assert ip.shipped_template_verified("default", DEFAULT_SHA) == (False, ip.REASON_NO_SIGNATURE)
 

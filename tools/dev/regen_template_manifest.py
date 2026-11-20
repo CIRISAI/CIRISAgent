@@ -47,8 +47,8 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 TEMPLATES = REPO / "ciris_engine" / "ciris_templates"
-MANIFEST = REPO / "pre-approved-templates.json"
-HYBRID = REPO / "pre-approved-templates.hybrid.json"
+MANIFEST = REPO / "ciris_engine" / "data" / "seed" / "pre-approved-templates.json"
+HYBRID = REPO / "ciris_engine" / "data" / "seed" / "pre-approved-templates.hybrid.json"
 # Location of the 32-byte ed25519 signing key, supplied by the operator. Kept out
 # of the source so the tool carries no assumption about where a steward keeps it.
 KEY_ENV = "CIRIS_ROOT_WA_KEY"
@@ -226,18 +226,24 @@ def sign_hybrid() -> int:
         return 1
 
     templates = collect()
-    # The retired 2025 classical root's fields are not carried: nothing accepts them (100% PQC, 2.20.0).
-    body = (
-        json.dumps(
-            {
-                "version": "1.0",
-                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-                "templates": templates,
-            },
-            indent=2,
-        )
-        + "\n"
-    ).encode("utf-8")
+    current = json.loads(prior_manifest).get("templates") if prior_manifest else None
+    if current == templates:
+        # Up to date: pre-approve these exact bytes. The retired classical root fields stay (the template ledgers
+        # still name that key); nothing accepts them (100% PQC, 2.20.0) -- the hybrid signature is the approval.
+        body = prior_manifest
+    else:
+        # The templates moved: rebuild. The retired root's fields cannot be re-signed, so they are not carried.
+        body = (
+            json.dumps(
+                {
+                    "version": "1.0",
+                    "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                    "templates": templates,
+                },
+                indent=2,
+            )
+            + "\n"
+        ).encode("utf-8")
     MANIFEST.write_bytes(body)
     HYBRID.unlink(missing_ok=True)
     signed = _signed_statement_bytes(body, key_id)

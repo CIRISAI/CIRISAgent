@@ -2556,6 +2556,12 @@ class CorrectionEpisodeTests:
                     })
                     if tags is not None:
                         outcome["extra"]["tags"] = tags
+                    try:  # the identity profile's standing at the end (rc21 section 3); logging only
+                        _pst, _pb = await self._req("GET", "/v1/wa/deferrals", self.harness_token, timeout=30)
+                        outcome["extra"]["profile_at_end"] = ((_pb.get("data") or {}).get("profile")
+                                                              if _pst == 200 and isinstance(_pb, dict) else {"status_code": _pst})
+                    except Exception as e:  # noqa: BLE001
+                        outcome["extra"]["profile_at_end"] = {"error": f"{type(e).__name__}: {e}"}
                     self._log("verdict", result=outcome["result"], **outcome["extra"])
                     self._log("end", ok=True)
                     self.results.append({"test": name, "status": "✅ PASS", "error": None})

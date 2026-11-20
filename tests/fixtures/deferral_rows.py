@@ -81,6 +81,10 @@ class FakeNode:
 
     def emit_deferral_request(self, *args: object) -> str:
         self.calls.append(("emit_deferral_request", args))
+        # 0.5.250's deferral:request:v1 refuses an empty thought_id (RATCHET run 44748258728: a base link that
+        # sent "" was never signed, so its WA answer had nothing to answer and no profile could be anchored).
+        if len(args) > 2 and not args[2]:
+            raise ValueError("deferral.bad_input: invalid: bad input: thought_id is empty")
         return self._sign("emit_deferral_request", "deferral:request:v1", args, deferral_id=args[0])
 
     def emit_deferral_response(

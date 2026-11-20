@@ -5,6 +5,13 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.1-stable] - 2026-11-20
+
+### Fixed
+
+- **A fresh agent's base-link deferral can be resolved, so its identity profile can be anchored.** The base-link and exact-text re-approval deferrals sent `thought_id=""`. ciris-server 0.5.250's `deferral:request:v1` refuses that (`deferral.bad_input`), so no signed request row was written. The Wise Authority's answer then had nothing to answer (409), and no amendment could ever count as authoritative. Each now names its task's own seed thought, held DEFERRED so no processor takes it up. The test fixture node now refuses an empty `thought_id` the way the node does. Found by RATCHET run 44748258728, cases ac-20 and rv-01.
+- **The identity profile is checked at boot,** at the end of startup and after the setup wizard's resume. An unanchored agent therefore asks for its base link before anyone talks to it. Before, the deferral opened only when the first message built a context, so every agent's first conversation ran unanchored. The check is best-effort: if it fails, the first thought checks again.
+
 ## [2.23.0-stable] - 2026-11-20
 
 ### Changed

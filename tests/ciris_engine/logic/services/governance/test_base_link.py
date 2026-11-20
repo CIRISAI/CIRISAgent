@@ -128,6 +128,27 @@ async def test_the_service_opens_one_base_link_deferral(wise_authority_service: 
     assert pending[0].task_id.startswith("BASE_LINK_")
 
 
+@pytest.mark.asyncio
+async def test_the_base_link_request_names_a_deferred_seed_thought(
+    wise_authority_service: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The node refuses an empty thought_id, so the request names the task's own seed thought, held DEFERRED."""
+    from ciris_engine.logic import persistence
+    from ciris_engine.schemas.runtime.enums import ThoughtStatus
+
+    node = install_fake_node(monkeypatch)
+    await wise_authority_service.start()
+    deferral_id = await wise_authority_service.open_base_link_deferral(PROPOSAL)
+    (pending,) = [d for d in await wise_authority_service.get_pending_deferrals() if d.deferral_id == deferral_id]
+    assert pending.request_attestation_id, "the node signed the request row (an empty thought_id is refused)"
+    assert pending.thought_id
+    thought = persistence.get_thought_by_id(pending.thought_id, occurrence_id="__shared__")  # BASE_LINK_OCCURRENCE
+    assert thought is not None and thought.source_task_id == pending.task_id
+    assert thought.status == ThoughtStatus.DEFERRED  # never picked up as work
+    ((_, args),) = [c for c in node.calls if c[0] == "emit_deferral_request"]
+    assert args[2] == pending.thought_id
+
+
 # ---------------------------------------------------------- resolve: the service
 
 

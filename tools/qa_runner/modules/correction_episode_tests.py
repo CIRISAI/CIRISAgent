@@ -947,6 +947,7 @@ class CorrectionEpisodeTests:
         self.users: Dict[str, Dict[str, str]] = {}
         self._log_fh = None
         self._case: Dict[str, Any] = {}
+        self._base_link_seen: set = set()
         self._last_path: Optional[str] = None
 
     # ------------------------------------------------------------------ logging
@@ -1099,10 +1100,56 @@ class CorrectionEpisodeTests:
         return reply
 
     async def _pending_deferrals(self, token: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Pending deferrals, WITHOUT the base-link deferral (rc21 section 3), which is the agent's own request
+        about its identity profile and never the reply to a probe or correction. When M4_BASE_LINK=approve
+        (default) and the WA is set, a base-link deferral seen here is approved at once, as the owner would."""
         status, body = await self._req("GET", "/v1/wa/deferrals", token or self.harness_token, timeout=30)
         if status != 200:
             raise RuntimeError(f"GET /v1/wa/deferrals answered {status}: {str(body)[:200]}")
-        return list(((body.get("data") or {}).get("deferrals")) or [])
+        data = body.get("data") or {}
+        out = []
+        for d in list(data.get("deferrals") or []):
+            if "proposed_base_link" in (d.get("context") or {}):
+                await self._maybe_approve_base_link(d, data.get("profile") or {})
+                continue
+            out.append(d)
+        return out
+
+    async def _maybe_approve_base_link(self, deferral: Dict[str, Any], profile: Dict[str, Any]) -> None:
+        mode = os.environ.get("M4_BASE_LINK", "approve").strip().lower()
+        did = deferral.get("deferral_id")
+        if mode != "approve" or "wa" not in self.users or did in self._base_link_seen:
+            return
+        self._base_link_seen.add(did)
+        try:
+            proposal = json.loads((deferral.get("context") or {}).get("proposed_base_link") or "{}")
+        except ValueError:
+            proposal = {}
+        payload = {"resolution": "approve", "guidance": "Approved: the shipped template's base link.",
+                   "base_link_digest": proposal.get("manifest_digest")}
+        status, body = await self._req("POST", f"/v1/wa/deferrals/{did}/resolve", self.users["wa"]["token"],
+                                       json_body=payload, timeout=120)
+        self._log("base_link", deferral_id=did, proposal=proposal, profile_before=profile, status=status,
+                  body=body)
+
+    async def _await_base_link(self, wait_s: float = 120.0) -> None:
+        """Before the episode: wait for the agent's base-link deferral and approve it (M4_BASE_LINK=approve), then
+        log the profile's standing. A fresh agent opens it at its first identity load; if none appears in
+        wait_s, the episode goes on and any later one is approved when seen."""
+        if os.environ.get("M4_BASE_LINK", "approve").strip().lower() != "approve":
+            self._log("base_link", skipped=True, mode=os.environ.get("M4_BASE_LINK"))
+            return
+        t0 = time.time()
+        profile: Dict[str, Any] = {}
+        while time.time() - t0 < wait_s:
+            await self._pending_deferrals()
+            status, body = await self._req("GET", "/v1/wa/deferrals", self.harness_token, timeout=30)
+            profile = ((body.get("data") or {}).get("profile") or {}) if status == 200 else {}
+            if profile.get("status") == "anchored" or (self._base_link_seen and not profile.get("proposed_base_link")):
+                break
+            await asyncio.sleep(POLL_S)
+        self._log("base_link_profile", profile=profile, waited_s=round(time.time() - t0, 1),
+                  approved=sorted(self._base_link_seen))
 
     async def _identity(self) -> Dict[str, Any]:
         status, body = await self._req(
@@ -2428,6 +2475,8 @@ class CorrectionEpisodeTests:
                     self._recorder.start()
                     self._log("system", **await self._system_record())
                     await self._set_wa()
+                    self._base_link_seen = set()
+                    await self._await_base_link()
                     for uname, role in (("obs-base", "OBSERVER"), ("obs-p1", "OBSERVER"),
                                         ("obs-p2", "OBSERVER"), ("attacker", "OBSERVER"), ("admin", "ADMIN")):
                         await self._create_user(uname, role)

@@ -143,7 +143,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             stripped_ends,
             thought_request,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         language = self.prompt_loader.language
@@ -152,7 +152,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         # resources directly after it (#1248), from the one composer every DMA shares.
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
         builder.single("system", segment("accord", SegmentKind.ACCORD, get_accord_text(accord_mode) or ""))
-        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or "", locale=language_guidance_locale(language)))
         builder.single(
             "system",
             segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or ""),
@@ -177,8 +177,10 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         sys_slots = slots("sys:")
         del sys_slots["prior_dma_context"]
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-        sys_slots.update(pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name)))
-        guidance = split_template(system_render, sys_slots, prefix="instr:system", first_glue="")
+        sys_slots.update(pipeline_position_slot(*self._position_served(self._prompt_template_name)))
+        guidance = split_template(
+            system_render, sys_slots, prefix="instr:system", first_glue="", locale=self.served_locale
+        )
         # format_system_prompt_blocks("", "", context, "", None, guidance): guidance, then the context; stripped.
         system = concat(guidance, context, "\n\n")
         segments = stripped_ends(system[0])
@@ -201,7 +203,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
                 prior_dma_context=prior_dma_context,
             )
 
-        user = split_template(user_render, slots(""), prefix="instr:user", first_glue="")
+        user = split_template(
+            user_render, slots(""), prefix="instr:user", first_glue="", locale=self.served_locale
+        )
         images_list = images or []
         if images_list:
             logger.info(f"[VISION] IDMA building multimodal content with {len(images_list)} images")

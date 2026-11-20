@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 if TYPE_CHECKING:
     from ciris_engine.logic.prompt_assembly import AssemblyCall
@@ -192,6 +192,17 @@ DEFAULT_TEMPLATE = """{system_header}
 {closing_reminder}"""
 
 
+def _merged_locale(locales: List[Optional[str]], language: str) -> Optional[str]:
+    """The locale of a piece joined from fields served in ``locales``: their one locale, or, when they differ, the
+    one that is not the thought's language (so the piece is listed as a fallback), else unknown."""
+    known = [loc for loc in locales if loc]
+    if not known or len(known) != len(locales):
+        return next((loc for loc in known if loc.split("-")[0] != language.split("-")[0]), None)
+    if len(set(known)) == 1:
+        return known[0]
+    return next((loc for loc in known if loc.split("-")[0] != language.split("-")[0]), known[0])
+
+
 def _stage_contract() -> str:
     """The engine-owned ASPDMA contract (#1366): pipeline position, roles and authority, conscience override.
 
@@ -210,6 +221,20 @@ def _stage_contract() -> str:
     if not text and loader.language != DEFAULT_LANGUAGE:
         text = DMAPromptLoader(language=DEFAULT_LANGUAGE).load_prompt_template("action_selection_pdma").stage_contract
     return text or ""
+
+
+def _stage_contract_served() -> Tuple[str, Optional[str]]:
+    """``(contract, locale served)``: the thought language's copy, else English (as :func:`_stage_contract`)."""
+    text = _stage_contract()
+    own = get_prompt_loader(language=current_thought_language()).load_prompt_template("action_selection_pdma")
+    if own.stage_contract:
+        return text, own.served_language
+    return text, "en" if text else None
+
+
+def _pipeline_position_served() -> Tuple[str, Optional[str]]:
+    """``(paragraph, locale served)`` of :func:`_pipeline_position`."""
+    return get_prompt_loader(language=current_thought_language()).pipeline_position_served("action_selection_pdma")
 
 
 def _pipeline_position() -> str:
@@ -297,6 +322,31 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
     @prompts.setter
     def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
         self._file_prompts = value
+
+    def _prompt_locale(self, key: str) -> Optional[str]:
+        """The locale ``self.prompts[key]`` was served in, by the same per-key merge (FSD §8.1).
+
+        A caller override is the agent's own text (unknown); in a non-English thought, the localized copy's
+        locale when it supplies the key, else ``en`` (the key kept the English root template's text).
+        """
+        if key in self._caller_overrides:
+            return None
+        base = self._file_prompts
+        if isinstance(base, PromptCollection):
+            return base.served_language
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE
+
+        language = current_thought_language()
+        if language == DEFAULT_LANGUAGE:
+            return DEFAULT_LANGUAGE
+        try:
+            localized = get_prompt_loader(language=language).load_prompt_template("action_selection_pdma")
+        except (FileNotFoundError, ValueError):
+            return DEFAULT_LANGUAGE
+        value = localized.get_prompt(key)
+        if isinstance(value, str) and value:
+            return localized.served_language
+        return DEFAULT_LANGUAGE
 
     @in_thought_language("input_data.original_thought", "input_data.processing_context")
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
@@ -417,6 +467,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             typed,
             prefix="instr:user",
             plain=plain,
+            # The collection render_main_user reads (ASPDMA has no prompt_template_data of its own).
+            locale=parts.template_data.served_language if isinstance(parts.template_data, PromptCollection) else None,
         )
         segments, layout = _split_sender(segments, layout, parts.sender, current_thought_language())
 
@@ -594,7 +646,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         """The ASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
         from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage
 
         # #1007 — SYSTEM FIRST, matching the order the messages are emitted in.
@@ -640,7 +692,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # English crisis numbers here while coherence judged the reply in bn
         # (2.18.0 bn battery, q04/q06/q07).
         _lang = self._working_language(input_data.original_thought, input_data.processing_context)
-        builder.single("system", _segment("instr:language", "stage_instruction", get_language_guidance(_lang) or ""))
+        builder.single("system", _segment("instr:language", "stage_instruction", get_language_guidance(_lang) or "").model_copy(update={"locale": language_guidance_locale(_lang)}))
         # Crisis resources ride directly after language guidance (#1248) — the
         # locale's verified numbers, from the one composer every DMA shares.
         builder.single("system", _segment("instr:crisis", "stage_instruction", get_crisis_resources_system_block(_lang) or ""))
@@ -813,8 +865,15 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         # #1366 — engine-owned, rendered right after the (possibly replaced)
         # header; see `_stage_contract` for why it is not read from self.prompts.
-        stage_contract = _stage_contract()
-        pipeline_position = _pipeline_position()
+        stage_contract, contract_locale = _stage_contract_served()
+        pipeline_position, position_locale = _pipeline_position_served()
+        field_locales = {
+            "system_header": self._prompt_locale("system_header"),
+            "pipeline_position": position_locale,
+            "stage_contract": contract_locale,
+            "decision_format": self._prompt_locale("decision_format"),
+            "closing_reminder": self._prompt_locale("closing_reminder"),
+        }
 
         # #1007 — render each field through `safe_format` so the composer's
         # per-field seam exists here too.
@@ -862,19 +921,33 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             if template_system_override or "system_header" in getattr(self, "_caller_overrides", {})
             else "engine"
         )
-        guidance_parts = [_segment("instr:system", "stage_instruction", rendered[0][1], header_source)]
+        # Locales (FSD §8.1): the agent's own header is unstated; a piece joined from engine fields served in
+        # different locales records the fallback one, so e.g. an English stage contract in ta is listed.
+        def located(seg: Any, fields: List[str]) -> Any:
+            return seg.model_copy(update={"locale": _merged_locale([field_locales[f] for f in fields], _lang)})
+
+        header = _segment("instr:system", "stage_instruction", rendered[0][1], header_source)
+        guidance_parts = [located(header, ["system_header"]) if header_source == "engine" else header]
         if at > 1:  # no pipeline position (a research manifest emptied it): the engine fields after the header
             guidance_parts.append(
-                _segment("instr:system:after_header", "stage_instruction", "\n\n".join(t for _, t in rendered[1:at]))
+                located(
+                    _segment(
+                        "instr:system:after_header", "stage_instruction", "\n\n".join(t for _, t in rendered[1:at])
+                    ),
+                    names[1:at],
+                )
             )
         if at < len(names):
-            guidance_parts.append(pipeline_position_segment(rendered[at][1]))
+            guidance_parts.append(pipeline_position_segment(rendered[at][1], locale=position_locale))
             if rendered[at + 1 :]:
                 guidance_parts.append(
-                    _segment(
-                        "instr:system:after_position",
-                        "stage_instruction",
-                        "\n\n".join(_text for _, _text in rendered[at + 1 :]),
+                    located(
+                        _segment(
+                            "instr:system:after_position",
+                            "stage_instruction",
+                            "\n\n".join(_text for _, _text in rendered[at + 1 :]),
+                        ),
+                        names[at + 1 :],
                     )
                 )
         blocks: List[Any] = [(identity, identity_layout)]

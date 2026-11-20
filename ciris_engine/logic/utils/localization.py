@@ -623,6 +623,24 @@ def get_language_guidance(lang_code: str) -> str:
     return ""
 
 
+def language_guidance_locale(lang_code: str) -> Optional[str]:
+    """The locale :func:`get_language_guidance` serves for ``lang_code``, by the same branches (FSD §8.1).
+
+    ``lang_code`` when the locale's own file supplies the block, ``en`` on the English fallback, None when a
+    research manifest replaced it (its text has no served locale) or nothing is served. A separate read so the
+    text keeps its one recorded seam.
+    """
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides, override_string
+
+    if get_active_overrides() is not None and override_string("prompts.language_guidance", lang_code) is not None:
+        return None
+    if language_guidance_parts(lang_code) or get_string(lang_code, "prompts.language_guidance", default=""):
+        return lang_code
+    if lang_code != DEFAULT_LANGUAGE and language_guidance_parts(DEFAULT_LANGUAGE):
+        return DEFAULT_LANGUAGE
+    return None
+
+
 def get_prohibition_guidance(lang_code: str) -> str:
     """Return the round-1 DMA prohibition-context block for LLM prompts (#910).
 

@@ -55,6 +55,11 @@ class ConsciencePrompts(BaseModel):
     system_prompt_tail: str = Field(default="")
     user_prompt_template: str = Field(default="")
     user_prompt_with_image_template: str = Field(default="")
+    # The locale of the file actually served, after any fallback to English (the manifest's locale record).
+    served_language: Optional[str] = Field(default=None)
+    # The system prompt is deliberately multilingual (one polyglot prompt for every locale): its locale is "mul",
+    # never a fallback. Set by the prompt file's own `polyglot_system_prompt: true`.
+    polyglot_system_prompt: bool = Field(default=False)
 
 
 class ConsciencePromptLoader:
@@ -180,6 +185,8 @@ class ConsciencePromptLoader:
                 system_prompt_tail=data.get("system_prompt_tail", ""),
                 user_prompt_template=data.get("user_prompt_template", ""),
                 user_prompt_with_image_template=data.get("user_prompt_with_image_template", ""),
+                served_language=self.language if template_path.parent == self.localized_dir else DEFAULT_LANGUAGE,
+                polyglot_system_prompt=bool(data.get("polyglot_system_prompt", False)),
             )
 
             # conscience_prompt namespace. No state constructed unless the
@@ -202,6 +209,11 @@ class ConsciencePromptLoader:
                     setattr(prompts, field, "")
                     applied.append(field)
                 if applied:
+                    # Replaced fields are not the file's text: no served locale, and a replaced system prompt is
+                    # no longer the polyglot one.
+                    prompts.served_language = None
+                    if "system_prompt" in applied:
+                        prompts.polyglot_system_prompt = False
                     logger.warning(
                         "[RESEARCH-OVERRIDES] conscience %s: replaced %s",
                         conscience_type,
@@ -236,6 +248,17 @@ class ConsciencePromptLoader:
             english = ConsciencePromptLoader(prompts_dir=str(self.prompts_dir), language=DEFAULT_LANGUAGE)
             position = english.load_prompts(conscience_type).pipeline_position
         return prompts.system_prompt, position or "", prompts.system_prompt_tail
+
+    def prompt_locales(self, conscience_type: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Locales of ``(system prompt, pipeline position, user template)`` as served (``mul`` for a polyglot one).
+
+        The pipeline position is English when the locale's copy lacks it (``get_system_prompt_parts``).
+        """
+        prompts = self.load_prompts(conscience_type)
+        served = prompts.served_language  # None: a research manifest replaced fields, locale unknown
+        system = "mul" if prompts.polyglot_system_prompt else served
+        position = served if prompts.pipeline_position is not None else DEFAULT_LANGUAGE
+        return system, position, served
 
     def get_user_prompt(self, conscience_type: str, image_context: Optional[str] = None, **kwargs: str) -> str:
         """Build user prompt from template with optional image context.

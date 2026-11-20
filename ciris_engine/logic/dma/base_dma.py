@@ -79,6 +79,48 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return current_thought_language()
 
+    @property
+    def served_locale(self) -> Optional[str]:
+        """Locale of the engine template file this evaluator is reading now, after any fallback to English.
+
+        Recorded on the instruction pieces cut from it, so the manifest says which language each piece was in
+        (and lists a missing locale file as a fallback). None when the template is not a loaded collection.
+        """
+        template = getattr(self, "prompt_template_data", None)
+        return template.served_language if isinstance(template, PromptCollection) else None
+
+    def _position_served(self, template_name: str) -> Tuple[str, Optional[str]]:
+        """``(pipeline position paragraph, locale it was served in)`` from the engine template (English on the
+        fallback branch). Tolerates a substituted loader in tests: a non-string locale reads as unknown."""
+        loader: Any = getattr(self, "prompt_loader", None)
+        if loader is None:
+            return "", None
+        served = getattr(loader, "pipeline_position_served", None)
+        if served is None:
+            return str(loader.pipeline_position(template_name) or ""), None
+        try:
+            text, locale = served(template_name)
+        except (TypeError, ValueError):
+            return str(loader.pipeline_position(template_name) or ""), None
+        return text, locale if isinstance(locale, str) else None
+
+    def _pipeline_position_locale(self) -> Optional[str]:
+        """Locale of the paragraph :meth:`_position_entries` renders: this template's own, else the fallback's.
+
+        Reads the field directly, never through ``_get_prompt_value``: that is the compose dump's recorded seam,
+        and a second read there would add a block the prompt does not have.
+        """
+        own = getattr(getattr(self, "prompt_template_data", None), "pipeline_position", None)
+        if isinstance(own, str) and own:
+            return self.served_locale
+        name = getattr(self, "_prompt_template_name", None)
+        if getattr(self, "prompt_loader", None) is None or not isinstance(name, str):
+            return None
+        try:
+            return self._position_served(name)[1]
+        except FileNotFoundError:
+            return None
+
     def _position_entries(self) -> List[Tuple[str, str]]:
         """The guide entries that follow ``system_guidance_header``: its pipeline position, then the rest of it.
 

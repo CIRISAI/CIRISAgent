@@ -42,6 +42,10 @@ class PromptCollection(BaseModel):
     description: str = Field(..., description="Description of this prompt collection")
     version: str = Field("1.0", description="Collection version")
 
+    # The locale of the file this collection was read from, after any fallback to English (#1366 locale record).
+    # None when unknown (built in code, or a research manifest replaced fields).
+    served_language: Optional[str] = Field(None, description="Locale of the template file actually served")
+
     # Core prompt sections
     system_header: Optional[str] = Field(None, description="System message header")
     # #1366 — engine-owned ASPDMA contract rendered right after `system_header`;

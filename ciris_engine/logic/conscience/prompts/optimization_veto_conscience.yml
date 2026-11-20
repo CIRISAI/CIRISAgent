@@ -33,6 +33,7 @@
 version: "3.0"
 description: "CIRIS-EOV polyglot torque shard prompts (v3.0: canonical-encoding uplift)"
 language: "en"
+polyglot_system_prompt: true  # one polyglot system prompt for every locale: its manifest locale is "mul"
 
 system_prompt: |-
   === CIRIS-EOV · יֵצֶר · نَفْس لَوَّامَة · 良知 · συνείδησις ===

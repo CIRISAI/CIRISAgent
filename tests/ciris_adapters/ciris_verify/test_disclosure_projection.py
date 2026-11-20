@@ -131,7 +131,12 @@ async def test_disclosure_text_reaches_the_trace_component_at_every_level(level:
     asserted -- GENERIC is the default and the one most likely to be trimmed.
     """
     service = AccordMetricsService(
-        config={"consent_given": True, "consent_timestamp": "2026-01-01T00:00:00Z", "trace_level": level.value}
+        config={
+            "consent_given": True,
+            "consent_timestamp": "2026-01-01T00:00:00Z",
+            "trace_level": level.value,
+            "allow_unkeyed_agent_id": True,  # no signing engine in this test
+        }
     )
     lens = _RecordingLens()
     service._lens = lens
@@ -159,7 +164,12 @@ async def test_an_empty_disclosure_adds_no_notice_line() -> None:
     """Negative control: the assertion above is not satisfied by some other
     text that happens to land in attestation_context."""
     service = AccordMetricsService(
-        config={"consent_given": True, "consent_timestamp": "2026-01-01T00:00:00Z", "trace_level": "generic"}
+        config={
+            "consent_given": True,
+            "consent_timestamp": "2026-01-01T00:00:00Z",
+            "trace_level": "generic",
+            "allow_unkeyed_agent_id": True,  # no signing engine in this test
+        }
     )
     lens = _RecordingLens()
     service._lens = lens

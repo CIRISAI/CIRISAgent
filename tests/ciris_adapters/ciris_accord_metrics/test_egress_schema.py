@@ -235,7 +235,7 @@ class _FakeLens:
 @pytest.mark.asyncio
 async def test_the_service_filters_before_the_substrate_sees_it(caplog: pytest.LogCaptureFixture) -> None:
     """End to end through _process_single_event: the signer never receives the reason."""
-    service = AccordMetricsService(config={"trace_level": "generic"})
+    service = AccordMetricsService(config={"trace_level": "generic", "allow_unkeyed_agent_id": True})
     lens = _FakeLens()
     service._lens = lens
     event = {

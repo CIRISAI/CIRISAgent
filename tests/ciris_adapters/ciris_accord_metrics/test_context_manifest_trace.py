@@ -238,7 +238,7 @@ async def test_the_service_puts_it_in_the_signed_component_data(tmp_path: Path, 
     """In component ``data``: the bytes the seal signs (§8), so an aggregator cannot swap it."""
     from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
 
-    service = AccordMetricsService(config={"trace_level": level})
+    service = AccordMetricsService(config={"trace_level": level, "allow_unkeyed_agent_id": True})
     # Set the effective level directly: without a configured NER scrubber the service downgrades full_traces to
     # detailed at bootstrap (test_full_traces_downgrade.py), which is right, and not what this test is about.
     service._trace_level = TraceDetailLevel(level)
@@ -302,3 +302,47 @@ def test_the_published_schema_refuses_content_where_a_token_belongs(pseudonymize
     cm["segments"][0]["text"] = "segment bytes"  # not a member: additionalProperties is false
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(cm, {**schema["definitions"]["ContextManifest"], "definitions": schema["definitions"]})
+
+
+# --------------------------------------------------------------------------------------------- agent_id_hash
+
+
+@pytest.mark.asyncio
+async def test_no_key_derived_agent_id_hash_means_no_capture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail closed: without the signing engine nothing is captured under a name-derived or 'unknown' id."""
+    import ciris_engine.logic.persistence.models.graph as graph
+
+    monkeypatch.setattr(graph, "get_persist_engine", lambda: None)
+    service = AccordMetricsService(config={"trace_level": "detailed"})
+    service.set_agent_id("datum")  # the old fallback would ship sha256("datum")[:16]
+    lens = _FakeLens()
+    service._lens = lens
+    await service._process_single_event(_llm_call_event())
+    assert lens.components == []
+    assert service.get_metrics()["events_refused_unkeyed_agent"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_key_derived_agent_id_hash_is_what_ships(monkeypatch: pytest.MonkeyPatch) -> None:
+    import base64
+    import hashlib
+
+    import ciris_engine.logic.persistence.models.graph as graph
+
+    pub = b"\x01" * 32
+
+    class _Engine:
+        def local_public_key_b64(self) -> str:
+            return base64.b64encode(pub).decode()
+
+        def local_derived_key_id(self) -> str:
+            return "k"
+
+    monkeypatch.setattr(graph, "get_persist_engine", lambda: _Engine())
+    service = AccordMetricsService(config={"trace_level": "generic"})
+    service.set_agent_id("datum")
+    lens = _FakeLens()
+    service._lens = lens
+    await service._process_single_event(_llm_call_event())
+    assert lens.components[0]["agent_id_hash"] == hashlib.sha256(pub).hexdigest()[:16]
+    assert lens.components[0]["agent_id_hash"] != hashlib.sha256(b"datum").hexdigest()[:16]

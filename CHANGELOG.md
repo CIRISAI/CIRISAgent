@@ -5,6 +5,13 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.2-stable] - 2026-11-20
+
+### Fixed
+
+- **An agent's own identity proposal reaches a Wise Authority.** An identity-scope MEMORIZE with no verified approval used to become a PONDER, so the agent's proposed wording never reached a WA (RATCHET run 44774304572). It still never runs the second pass and never stores anything (#1320). Instead it becomes a DEFER that carries the proposal: the exact proposed text and its M-1 justification, with a code-written summary. The WA approves those exact bytes. A write that states no wording still PONDERs.
+- **The mock LLM's identity writes state an M-1 justification.** The mock never carried `m1_justification`, so on mock runs every WA-approved amendment was deferred back and the context map could never show an amendment land. The mock's identity-scope MEMORIZE and its MSASPDMA answer now carry one.
+
 ## [2.23.1-stable] - 2026-11-20
 
 ### Fixed

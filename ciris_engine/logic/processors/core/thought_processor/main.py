@@ -1260,22 +1260,39 @@ class ThoughtProcessor(
         if wa_authorization_of(task) is not None:
             return None
 
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import identity_proposal_deferral
         from ciris_engine.logic.utils.localization import get_string, get_user_language_from_context
 
-        # The thought's language, by the same chain every DMA uses.
-        text = get_string(get_user_language_from_context(thought_context), "handlers.memorize_identity_not_approved")
-        logger.warning(
-            "MSASPDMA-GATE: identity-scope MEMORIZE of %s for thought %s carries no verified Wise Authority "
-            "approval; refused before the second pass, PONDER instead.",
-            node.id,
-            thought_item.thought_id,
-        )
-        refused = ActionSelectionDMAResult(
-            selected_action=HandlerActionType.PONDER,
-            action_parameters=PonderParams(questions=[text]),
-            rationale=f"MSASPDMA-GATE: {text}",
-            resource_usage=action_result.resource_usage,
-        )
+        # The agent's proposed wording goes to a Wise Authority, with its M-1 justification, for approval
+        # (Eric, 2026-11-20): a DEFER carrying the proposal, never the write. Only a write that states no
+        # wording at all falls back to the PONDER, whose text comes from code (#1320).
+        channel_id = getattr(getattr(thought_context, "system_snapshot", None), "channel_id", None)
+        proposal = identity_proposal_deferral(node, channel_id=channel_id if isinstance(channel_id, str) else None)
+        if proposal is not None:
+            logger.warning(
+                "MSASPDMA-GATE: identity-scope MEMORIZE of %s for thought %s carries no verified Wise Authority "
+                "approval; refused before the second pass, DEFER with the proposal for a Wise Authority instead.",
+                node.id,
+                thought_item.thought_id,
+            )
+            refused = proposal.model_copy(update={"resource_usage": action_result.resource_usage})
+        else:
+            # The thought's language, by the same chain every DMA uses.
+            text = get_string(
+                get_user_language_from_context(thought_context), "handlers.memorize_identity_not_approved"
+            )
+            logger.warning(
+                "MSASPDMA-GATE: identity-scope MEMORIZE of %s for thought %s carries no verified Wise Authority "
+                "approval and states no wording; refused before the second pass, PONDER instead.",
+                node.id,
+                thought_item.thought_id,
+            )
+            refused = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.PONDER,
+                action_parameters=PonderParams(questions=[text]),
+                rationale=f"MSASPDMA-GATE: {text}",
+                resource_usage=action_result.resource_usage,
+            )
         await self._emit_verb_second_pass_result_event(
             thought_item=thought_item,
             verb="memorize",

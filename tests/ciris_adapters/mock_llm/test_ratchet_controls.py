@@ -15,7 +15,7 @@ import yaml
 
 from ciris_adapters.mock_llm import directives
 from ciris_adapters.mock_llm.responses import PONDER_LOOP_QUESTION, create_response
-from ciris_adapters.mock_llm.responses_action_selection import _with_mock_params
+from ciris_adapters.mock_llm.responses_action_selection import MOCK_M1_JUSTIFICATION, _with_mock_params
 from ciris_adapters.mock_llm.service import MockLLMService
 from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
@@ -243,4 +243,8 @@ def test_s5_defer_then_identity_memorize_with_the_statement():
     )
     result = create_response(MSASPDMALLMResult, messages=[{"role": "user", "content": second}], task_id="task-g")
     assert (result.final_action, result.node_scope) == ("MEMORIZE", "identity")
-    assert result.attributes == {"created_by": "agent", "statement": paragraph}
+    assert result.attributes == {
+        "created_by": "agent",
+        "statement": paragraph,
+        "m1_justification": MOCK_M1_JUSTIFICATION,  # an identity write states its M-1 (#1366)
+    }

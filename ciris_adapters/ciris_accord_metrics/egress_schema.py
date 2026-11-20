@@ -875,3 +875,52 @@ class ViolationReporter:
     def snapshot(self) -> Dict[str, int]:
         with self._lock:
             return {f"schema_violations_{kind.value}": n for kind, n in self.counts.items()}
+
+
+def json_schema_for(fields: Mapping[str, FieldSpec]) -> JSONDict:
+    """The JSON Schema (draft-07) object a field map admits, at its most permissive level (FULL).
+
+    The published trace format (schemas/trace_format_v3_1_0.json) takes its LLM_CALL and context_manifest
+    definitions from here, so the document and the enforced egress schema are one source; a test compares them.
+    Each field's lowest level is recorded as ``x-ciris-min-level``. A null value is allowed wherever the enforcer
+    passes one through (it keeps an explicit None).
+    """
+
+    def one(spec: FieldSpec) -> JSONDict:
+        kind = spec.kind
+        out: JSONDict
+        if kind == FieldKind.NUMBER:
+            out = {"type": ["number", "null"]}
+        elif kind == FieldKind.INTEGER:
+            out = {"type": ["integer", "null"]}
+        elif kind == FieldKind.BOOL:
+            out = {"type": ["boolean", "null"]}
+        elif kind == FieldKind.TOKEN:
+            out = {"type": ["string", "null"], "pattern": _TOKEN_RE.pattern}
+        elif kind == FieldKind.TIMESTAMP:
+            out = {"type": ["string", "null"], "format": "date-time"}
+        elif kind == FieldKind.URL:
+            out = {"type": ["string", "null"], "format": "uri"}
+        elif kind in (FieldKind.LABEL, FieldKind.TEXT):
+            out = {"type": ["string", "null"]}
+        elif kind == FieldKind.LIST:
+            out = {"type": ["array", "null"], "items": one(spec.items) if spec.items else {}}
+        elif kind == FieldKind.MAP:
+            out = {"type": ["object", "null"], "additionalProperties": one(spec.values) if spec.values else {}}
+        elif kind == FieldKind.OBJECT:
+            out = json_schema_for(spec.children or {})
+            out["type"] = ["object", "null"]
+        else:  # opaque JSON
+            out = {}
+        if spec.max_chars is not None and kind in (FieldKind.TOKEN, FieldKind.LABEL, FieldKind.URL, FieldKind.TEXT):
+            out["maxLength"] = spec.max_chars
+        if spec.max_items is not None and kind in (FieldKind.LIST, FieldKind.MAP):
+            out["maxItems" if kind == FieldKind.LIST else "maxProperties"] = spec.max_items
+        out["x-ciris-min-level"] = spec.min_level.value
+        return out
+
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {name: one(spec) for name, spec in fields.items()},
+    }

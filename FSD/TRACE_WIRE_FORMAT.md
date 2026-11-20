@@ -977,6 +977,13 @@ and ships as it is.
 opaque JSON. A field `PromptManifest` gains is dropped at egress (and logged) until it is listed there, and a
 test fails on any unlisted model field.
 
+**Schema version.** The member rides additively under `trace_schema_version "3.0.0"` today: persist keeps
+component `data` verbatim and verifies the signature over it. `"3.1.0"` names it. lens-core stamps it from
+server 0.6, and persist v62.0 adds it to the accepted list. The published schema is
+`ciris_adapters/ciris_accord_metrics/schemas/trace_format_v3_1_0.json`. Its `LlmCallData` and
+`ContextManifest` definitions are generated from the enforced egress schema
+(`egress_schema.json_schema_for`), and a test compares them, so the document cannot drift from what ships.
+
 **Size.** 5.7–11.6 KB per call at `detailed` (measured on the compose-golden stages: 13–28 segments each), so
 about 90–120 KB per full-pipeline thought, more with conscience retries. That is well inside the 1 MiB inline
 bound (CC 2.6.1.6); a trace over it takes the `trace_manifest:v1` chunked path like any other.

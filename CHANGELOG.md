@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **ciris-server 0.5.251** (edge v45.1.7, persist v61.4.2; PyPI wheel hashes checked, Android wheels match): `emit_identity_amendment` gains `prev=`, so an approved amendment names the chain head it follows. No other surface change (1969 = 1969 symbols); no migrations.
 - **A shipped template is pre-approved, so its identity is anchored at first boot with no Wise Authority step** (Eric, 2026-11-20).
   - When the agent's template matches the accord-holder-signed template manifest (`pre-approved-templates.hybrid.json`), that template is the profile's anchored base. It is derived, not a row, and no base-link deferral opens.
   - The first approved amendment names it as `prev = "template:<the template's sha256>"`, which needs ciris-server 0.5.252; later amendments chain by row id. The sentinel is the template's own checksum, not the manifest's, so a re-signed manifest doesn't break any chain and only a change to the template's bytes does.

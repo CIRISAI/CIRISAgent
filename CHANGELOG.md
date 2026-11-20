@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.0-stable] - 2026-11-20
+
+### Changed
+
+- **ciris-server 0.5.250** (edge v45.1.7, persist v61.4.2, verify v22.2.0): video calls on agent installs. persist v61.4.2 routes every directory call the capsule used to stub, which caused the `call.plumbing` 503 on agent installs. Edge v45.1.7 makes the first bootstrap peer the default direct-link facilitator. The QA call route now attends as the owner (CIRISServer#884): on edge 45.1.7 it had joined as the agent actor and was refused `join_refused`. The cross-NAT pair + av lane on the pre-release (test-0.5.250-7e41958e) delivered 1800/1800 frames each way, with chat, files, the direct link and the trace gate green. Against 0.5.249 the agent-facing surface removes nothing; `emit_deferral_response` gains an optional `amendment_digest`, and `Edge.node_signer_key_id` is new. There are no forward-only migrations, and the client floor is unchanged. The three bundled Android wheels match PyPI's sha256, and the iOS native library matches the signed release's `ios.tar.gz` (SHA256SUMS OK) and reports 0.5.250.
+- **The direct-link facilitator follows `CIRIS_EDGE_BOOTSTRAP_PEERS[0]`** when that is set, as the server's own compose does, with the canonical's signed `ip` hint as the fallback. `CIRIS_DIRECT_LINK_FACILITATOR` still overrides.
+- **H3ERE context flow (#1366, #1367).** Prompts are built from typed segments under one policy file (`context_policy.yaml`), with a per-call context manifest, and are tied to the TLA+ model. Other changes:
+  - The verified sender carries a typed task origin; SYSTEM is never inferred from a missing sender.
+  - `pipeline_position` and ASPDMA's `stage_contract` are structural fields that no template can override.
+  - Each DMA resolves its language per thought.
+  - The conscience retry block is "GUIDANCE AFTER A CONSCIENCE VETO", retranslated in all 28 locales.
+- **The context manifest records locale (#1368).** It holds the call's language, each segment's locale and how that is known, and the segments that fell back to English, per-field fallbacks and research overrides included.
+- **ASPDMA `stage_contract` for Tamil, Ukrainian and Urdu (#1369).** Tamil and Ukrainian come from the i18n lane. Urdu was written by hand after the lane's reviewer twice asked to keep "Wise Authority" in English, against the shipped rendering.
+- **Signed traces (#1370), `trace_format_v3_1_0.json`:**
+  - LLM_CALL carries the call's `context_manifest` from `detailed` up. It sits in the signed component data. Verified sender ids are per-agent HMAC pseudonyms below `full_traces`.
+  - Every component's signed data carries CC 3.1.5's `run_kind` (`production` | `prod-personal` | `prod-managed` | `qa` | `battery` | `mock`).
+  - Every cut the egress filter makes is recorded in the signed data as `egress_alterations`.
+  - The published 3.1.0 schema is generated from the enforced egress schema.
+
+  These ride additively under trace era 3.0.0; persist v61.4.2 was witnessed to keep and verify them. FSD/TRACE_WIRE_FORMAT.md §0 records the trace as shipped.
+
+### Fixed
+
+- **`selected_action` and `final_action` ship as `speak`,** not `HandlerActionType.SPEAK` (`str(enum)` in the step decorators).
+- **No trace is captured under a name-derived or `unknown` `agent_id_hash`.** Without the signing engine the component is refused and counted (`events_refused_unkeyed_agent`).
+- **CodeQL and Sonar findings** on the context-flow work:
+  - the veto log carries a count, not evidence ids;
+  - the LLM budget key fingerprint is a per-process ordinal;
+  - skill-draft paths get a prefix check.
+
 ## [2.22.1-stable] - 2026-11-16
 
 ### Known issues

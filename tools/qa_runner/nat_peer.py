@@ -391,20 +391,25 @@ class PeerHalf(CrossChatStage):
         if not stream.ok:
             self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
             raise self._fail(step, LAYER_MESSAGE, f"{me} could not start its stream: {stream.brief()}")
-        self.clock.sleep(seconds + AV_DRAIN_S)
+        # The leg each stream rides is read MID-call: once the peer leaves, its
+        # publisher's leg is gone and the stream row reads leg "none".
+        self.clock.sleep(seconds / 2)
+        mid = dict(stats())
+        self.clock.sleep(seconds - seconds / 2 + AV_DRAIN_S)
         stats()
         stop = self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
         final = _payload(stop.body) if stop.ok else None
         self.av_record = record = {
             "joined": _payload(started.body),
             "leg_up_s": None if leg_wait is None else round(self.clock.now() - joined_at - seconds - AV_DRAIN_S, 1),
+            "mid_stats": mid,
             "last_stats": dict(last),
             "stop": final if isinstance(final, dict) else stop.brief(),
             "asked": {"seconds": seconds, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "frame_budget_bytes": budget},
         }
         # The stop body carries the stats at its top level, beside "room" and "summary".
         body = final if isinstance(final, dict) else last
-        detail = av_summary(body if isinstance(body, dict) else {}, seconds * rate_hz)
+        detail = av_summary(body if isinstance(body, dict) else {}, seconds * rate_hz, streams_from=mid)
         received = _dig(body, "received", "frames")
         if not isinstance(received, int) or received <= 0:
             raise self._fail(step, LAYER_MESSAGE, f"{me} heard none of {peer}'s frames: {detail}")
@@ -522,9 +527,15 @@ def _dig(obj: object, *keys: str) -> object:
     return obj
 
 
-def av_summary(stats: Dict[str, object], expected: int) -> str:
-    """One line edge reads: frames each way, delay, late/stale, and the leg each stream rode."""
-    streams = _dig(stats, "call", "streams")
+def av_summary(stats: Dict[str, object], expected: int, streams_from: Optional[Dict[str, object]] = None) -> str:
+    """One line edge reads: frames each way, delay, late/stale, and the leg each stream rode.
+
+    ``streams_from`` is the mid-call sample: the leg is read while both sides
+    are still in the call (after a leave, the departed publisher's row reads "none").
+    """
+    streams = _dig(streams_from, "call", "streams") if streams_from else None
+    if not isinstance(streams, list):
+        streams = _dig(stats, "call", "streams")
     legs = ", ".join(
         f"{s.get('leg')}(parent_changes={s.get('parent_changes')})" for s in streams if isinstance(s, dict)
     ) if isinstance(streams, list) else "no streams"

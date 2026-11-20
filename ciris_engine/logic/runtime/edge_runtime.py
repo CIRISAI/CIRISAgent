@@ -99,6 +99,13 @@ def _direct_link_facilitator(engine: Any) -> Optional[str]:
     (CIRISEdge#926). Before those, a punch that succeeded on one side moved that
     side to UDP while the other stayed relayed, and the link carried nothing.
 
+    When ``CIRIS_EDGE_BOOTSTRAP_PEERS`` is set, its first peer is the facilitator,
+    as the server's own compose does (``bootstrap.first()``). In production the
+    canonical IS the first bootstrap peer, so the two agree; in a harness the
+    mesh's bootstrap peer is the harness canonical, which persist's baked hint may
+    not name (fold legs stayed unformed until the harness passed it). The signed
+    ``ip`` hint is the fallback when no bootstrap peer is set.
+
     ``CIRIS_DIRECT_LINK_FACILITATOR`` overrides: ``off`` / ``0`` / empty proposes
     none, ``bootstrap`` is the default, and a ``host:port`` names another.
     """
@@ -109,6 +116,11 @@ def _direct_link_facilitator(engine: Any) -> Optional[str]:
             return None
         if value.lower() != "bootstrap":
             return value
+    first_peer = next(
+        (p.strip() for p in os.environ.get("CIRIS_EDGE_BOOTSTRAP_PEERS", "").split(",") if p.strip()), None
+    )
+    if first_peer:
+        return first_peer
     try:
         import json as _json
 
@@ -568,11 +580,20 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             logger.debug("local_derived_key_id unavailable: %s", _actor_exc)
 
         key_id = _actor_key_id or edge.signer_key_id()
+        # signer= is edge.signer_key_id(): the key edge signs as by default (the
+        # actor on a split home), not the transport. The transport is the node
+        # signer, named by Edge.node_signer_key_id() from edge 45.1.7 on.
+        _node_signer = getattr(edge, "node_signer_key_id", None)
+        try:
+            _transport_key_id = _node_signer() if callable(_node_signer) else None
+        except Exception:  # noqa: BLE001 - a log line must not break boot
+            _transport_key_id = None
         logger.info(
-            "Edge runtime initialized: actor=%s node=%s transport=%s identity=%s listen=%s peers=%d",
+            "Edge runtime initialized: actor=%s node=%s signer=%s transport=%s identity=%s listen=%s peers=%d",
             _actor_key_id,
             _node_key_id,
             edge.signer_key_id(),
+            _transport_key_id or "unreported",
             identity_path,
             listen_addr,
             len(bootstrap_peers),

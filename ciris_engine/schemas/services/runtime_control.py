@@ -1599,8 +1599,9 @@ class LLMCallEvent(BaseModel):
 
     # Prompt context manifest (FSD/PROMPT_CONTEXT_PROVENANCE.md §8, CIRISAgent#1366 Phase 2): which typed
     # segments this call contained, set when the call ran inside prompt_manifest_scope (PromptAssembler). A
-    # sidecar, never part of the prompt. None for calls not yet migrated to the assembler. Not yet on the
-    # lens wire: the accord-metrics egress schema does not list it (Phase 3).
+    # sidecar, never part of the prompt. None for calls not yet migrated to the assembler. On the lens
+    # wire from DETAILED up as LLM_CALL's signed `context_manifest` member (FSD/TRACE_WIRE_FORMAT.md §5.10.1),
+    # sender ids pseudonymized per agent below FULL (ciris_adapters/ciris_accord_metrics/context_manifest.py).
     context_manifest: Optional[PromptManifest] = Field(
         None, description="Per-call prompt context manifest (segments, trust after taint, guard violations)"
     )

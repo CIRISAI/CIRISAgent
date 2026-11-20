@@ -42,6 +42,7 @@ component ``data`` object.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import re
@@ -149,6 +150,15 @@ class EnforcementResult(BaseModel):
     violations: List[SchemaViolation] = Field(default_factory=list)
 
 
+#: The signed member that records what the filter altered (CC 3.1.5: a signed record is never silently altered).
+#: Each entry: ``path``, ``kind`` (``truncated`` | ``dropped_wrong_type`` | ``dropped_not_in_schema``),
+#: ``original_length`` and, for a cut of an allowed value only, ``sha256`` of the original. A dropped value gets no
+#: hash: it was content in the wrong place (a name in a token field), and a hash of it could be confirmed by
+#: guessing. A field above the trace level is not an alteration (the level mechanism) and is not recorded.
+ALTERATIONS_FIELD = "egress_alterations"
+ALTERATIONS_MAX = 64
+
+
 # ---------------------------------------------------------------------------
 # Spec constructors (short names keep the tables below readable)
 # ---------------------------------------------------------------------------
@@ -216,6 +226,109 @@ def _json(level: TraceLevel = F) -> FieldSpec:
 # builder emits something not listed here, or at a lower level than listed,
 # the builder is wrong and the enforcement log names it.
 # ---------------------------------------------------------------------------
+
+# The LLM_CALL ``context_manifest`` member (context_manifest.py; FSD/TRACE_WIRE_FORMAT.md §5.10). Every field
+# of PromptManifest, typed: it is content-free by construction (ids, digests, closed vocabulary, spans), so it
+# ships from DETAILED up, never at GENERIC, and never as opaque JSON. A field the model gains is dropped here
+# (and logged) until it is listed: tests/.../test_context_manifest_trace.py fails on an unlisted model field.
+CONTEXT_MANIFEST_MAX_SEGMENTS = 512
+CONTEXT_MANIFEST_MAX_VIOLATIONS = 64
+
+_CM_AUTHN: Dict[str, FieldSpec] = {
+    # A per-agent pseudonym at DETAILED, the verified id at FULL (context_manifest.py, subject_id_form).
+    "subject_id": _ident(),
+    "role": _tok(D),
+    "verifier": _ident(),
+}
+_CM_AUTHZ: Dict[str, FieldSpec] = {
+    "grant_kind": _tok(D),
+    "grant_id": _ident(),
+    "authorizer_id": _ident(),  # a Wise Authority id
+    "signature_verified": _bool(D),
+    "attestation_ids": _list(_ident()),
+    "granted_at": _ts(D),
+}
+_CM_ACCT: Dict[str, FieldSpec] = {
+    "audit_entry_id": _ident(),
+    "row_hash": _ident(),
+    "trace_id": _ident(),
+    "veto_id": _ident(),
+    "discharge_ids": _list(_ident()),
+}
+_CM_STUB: Dict[str, FieldSpec] = {
+    "kind": _tok(D),
+    "provenance": _tok(D),
+    "source": _tok(D),
+    "trust": _tok(D),
+    "author_role": _tok(D),
+    "authority": _tok(D),
+    "scope": _tok(D),
+    "disposition": _tok(D),
+    "transforms": _list(_tok(D)),
+    "draft_relation": _tok(D),
+    "quote_share": _tok(D),
+    "size": _tok(D),
+    "position": _tok(D),
+    "digest": _tok(D),
+}
+_CM_SEGMENT: Dict[str, FieldSpec] = {
+    "segment_id": _ident(),
+    "kind": _tok(D),
+    "provenance": _tok(D),
+    "source": _tok(D),
+    "trust": _tok(D),
+    "lifecycle": _tok(D),
+    "authn": _obj(_CM_AUTHN, D),
+    "authz": _obj(_CM_AUTHZ, D),
+    "acct": _obj(_CM_ACCT, D),
+    "message_index": _int(D),
+    "span_start": _int(D),
+    "span_end": _int(D),
+    "sha256": _tok(D),
+    "truncated": _bool(D),
+    "derived_from": _list(_ident()),
+    "form": _tok(D),
+    "stub": _obj(_CM_STUB, D),
+    "withheld_sha256": _tok(D),
+    # #1368 (FSD/PROMPT_CONTEXT_PROVENANCE.md §8.1): the locale the bytes were rendered in, and how that is known.
+    "locale": _tok(D),
+    "locale_basis": _tok(D),
+}
+_CM_VIOLATION: Dict[str, FieldSpec] = {
+    "kind": _tok(D),
+    "stage": _tok(D),
+    "policy_key": _ident(),
+    "segment_id": _ident(),
+    "detail": _reason(),  # why, never the segment's text (PromptManifest contract)
+    "action": _tok(D),
+}
+CONTEXT_MANIFEST_SCHEMA: Dict[str, FieldSpec] = {
+    "call_id": _ident(),
+    "task_id": _ident(),
+    "thought_id": _ident(),
+    "thought_kind": _tok(D),
+    "retry_index": _int(D),
+    "stage": _tok(D),
+    "stage_role": _tok(D),
+    "response_model": _ident(),
+    "max_tokens_sent": _int(D),
+    "policy_version": _int(D),
+    "policy_sha256": _tok(D),
+    "assembler_version": _ident(),
+    "guard_mode": _tok(D),
+    "guard_violations": _list(_obj(_CM_VIOLATION, D), max_items=CONTEXT_MANIFEST_MAX_VIOLATIONS),
+    "segments": _list(_obj(_CM_SEGMENT, D), max_items=CONTEXT_MANIFEST_MAX_SEGMENTS),
+    "messages_sha256": _tok(D),
+    "sent_messages_match": _bool(D),
+    "provider_capture": _tok(D),
+    "provider_mode": _ident(),
+    "provider_kwargs_added": _list(_ident()),
+    # #1368: the call's language and the segments whose stated locale differs from it.
+    "language": _tok(D),
+    "locale_fallbacks": _list(_ident(), max_items=CONTEXT_MANIFEST_MAX_SEGMENTS),
+    # context_manifest.py: which form segments[*].authn.subject_id shipped in.
+    "subject_id_form": _tok(D),
+}
 
 _IDMA_GENERIC: Dict[str, FieldSpec] = {
     "k_eff": _num(),
@@ -515,6 +628,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "parent_event_type": _tok(),
         "parent_attempt_index": _int(),
         "prompt_hash": _ident(),
+        "context_manifest": _obj(CONTEXT_MANIFEST_SCHEMA, D),
         "prompt": _text(),
         "response_text": _text(),
     },
@@ -550,8 +664,33 @@ class _Enforcer:
         self.event_type = event_type
         self.level = level
         self.violations: List[SchemaViolation] = []
+        self.alterations: List[JSONDict] = []
+
+    def _record_alteration(self, path: str, kind: ViolationKind, value: object, why: str) -> None:
+        if kind == ViolationKind.UNEXPECTED_FIELD and not why.startswith("not in schema"):
+            return  # above this level: the level mechanism, not an alteration
+        label = {
+            ViolationKind.OVER_CAP: "truncated",
+            ViolationKind.WRONG_TYPE: "dropped_wrong_type",
+            ViolationKind.UNEXPECTED_FIELD: "dropped_not_in_schema",
+        }[kind]
+        entry: JSONDict = {"path": path[:LABEL_MAX_CHARS * 2], "kind": label}
+        if isinstance(value, (str, list, tuple, dict)):
+            entry["original_length"] = len(value)
+        if kind == ViolationKind.OVER_CAP:
+            if isinstance(value, str):
+                raw = value.encode("utf-8")
+            else:
+                import json as _json
+
+                raw = _json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode(
+                    "utf-8"
+                )
+            entry["sha256"] = hashlib.sha256(raw).hexdigest()
+        self.alterations.append(entry)
 
     def _flag(self, path: str, kind: ViolationKind, value: object, why: str) -> None:
+        self._record_alteration(path, kind, value, why)
         self.violations.append(
             SchemaViolation(
                 event_type=self.event_type,
@@ -723,6 +862,31 @@ class _Enforcer:
         return None
 
 
+#: The alterations member, listed on every event so the published schema documents it. It is written by
+#: enforce_egress_schema itself; a producer's own ``egress_alterations`` is discarded before filtering.
+ALTERATIONS_SPEC = _list(
+    _obj(
+        {
+            "path": _label(G, LABEL_MAX_CHARS * 2),
+            "kind": _tok(),
+            "original_length": _int(),
+            "sha256": _tok(),
+        },
+        G,
+    ),
+    G,
+    max_items=ALTERATIONS_MAX + 1,
+)
+#: CC 3.1.5's run_kind, in every component's signed data. Written by the service after filtering
+#: (services._signed_data), closed vocabulary: production | prod-personal | prod-managed | qa | battery | mock.
+RUN_KIND_FIELD = "run_kind"
+RUN_KIND_VALUES = ("production", "prod-personal", "prod-managed", "qa", "battery", "mock")
+RUN_KIND_SPEC = _tok()
+for _event_fields in list(EVENT_SCHEMAS.values()) + [FALLBACK_SCHEMA]:
+    _event_fields[ALTERATIONS_FIELD] = ALTERATIONS_SPEC
+    _event_fields[RUN_KIND_FIELD] = RUN_KIND_SPEC
+
+
 def schema_for(event_type: str) -> Dict[str, FieldSpec]:
     return EVENT_SCHEMAS.get(event_type, FALLBACK_SCHEMA)
 
@@ -730,7 +894,13 @@ def schema_for(event_type: str) -> Dict[str, FieldSpec]:
 def enforce_egress_schema(event_type: str, level: TraceLevel, data: Mapping[str, object]) -> EnforcementResult:
     """Filter ``data`` to what ``level`` allows for ``event_type``. Pure; does not log."""
     enforcer = _Enforcer(event_type, level)
-    cleaned = enforcer.fields(schema_for(event_type), data, "")
+    cleaned = enforcer.fields(schema_for(event_type), {k: v for k, v in data.items() if k not in (ALTERATIONS_FIELD, RUN_KIND_FIELD)}, "")
+    if enforcer.alterations:
+        marks = enforcer.alterations[:ALTERATIONS_MAX]
+        if len(enforcer.alterations) > ALTERATIONS_MAX:
+            marks.append({"path": "*", "kind": "more", "original_length": len(enforcer.alterations) - ALTERATIONS_MAX})
+        # In `data`, so the signature covers it: the signed record says what was cut, never silently altered.
+        cleaned[ALTERATIONS_FIELD] = marks
     return EnforcementResult(data=cleaned, violations=enforcer.violations)
 
 
@@ -771,3 +941,52 @@ class ViolationReporter:
     def snapshot(self) -> Dict[str, int]:
         with self._lock:
             return {f"schema_violations_{kind.value}": n for kind, n in self.counts.items()}
+
+
+def json_schema_for(fields: Mapping[str, FieldSpec]) -> JSONDict:
+    """The JSON Schema (draft-07) object a field map admits, at its most permissive level (FULL).
+
+    The published trace format (schemas/trace_format_v3_1_0.json) takes its LLM_CALL and context_manifest
+    definitions from here, so the document and the enforced egress schema are one source; a test compares them.
+    Each field's lowest level is recorded as ``x-ciris-min-level``. A null value is allowed wherever the enforcer
+    passes one through (it keeps an explicit None).
+    """
+
+    def one(spec: FieldSpec) -> JSONDict:
+        kind = spec.kind
+        out: JSONDict
+        if kind == FieldKind.NUMBER:
+            out = {"type": ["number", "null"]}
+        elif kind == FieldKind.INTEGER:
+            out = {"type": ["integer", "null"]}
+        elif kind == FieldKind.BOOL:
+            out = {"type": ["boolean", "null"]}
+        elif kind == FieldKind.TOKEN:
+            out = {"type": ["string", "null"], "pattern": _TOKEN_RE.pattern}
+        elif kind == FieldKind.TIMESTAMP:
+            out = {"type": ["string", "null"], "format": "date-time"}
+        elif kind == FieldKind.URL:
+            out = {"type": ["string", "null"], "format": "uri"}
+        elif kind in (FieldKind.LABEL, FieldKind.TEXT):
+            out = {"type": ["string", "null"]}
+        elif kind == FieldKind.LIST:
+            out = {"type": ["array", "null"], "items": one(spec.items) if spec.items else {}}
+        elif kind == FieldKind.MAP:
+            out = {"type": ["object", "null"], "additionalProperties": one(spec.values) if spec.values else {}}
+        elif kind == FieldKind.OBJECT:
+            out = json_schema_for(spec.children or {})
+            out["type"] = ["object", "null"]
+        else:  # opaque JSON
+            out = {}
+        if spec.max_chars is not None and kind in (FieldKind.TOKEN, FieldKind.LABEL, FieldKind.URL, FieldKind.TEXT):
+            out["maxLength"] = spec.max_chars
+        if spec.max_items is not None and kind in (FieldKind.LIST, FieldKind.MAP):
+            out["maxItems" if kind == FieldKind.LIST else "maxProperties"] = spec.max_items
+        out["x-ciris-min-level"] = spec.min_level.value
+        return out
+
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {name: one(spec) for name, spec in fields.items()},
+    }

@@ -89,6 +89,7 @@ def _make_service() -> AccordMetricsService:
     )
     # Skip the engine-derived hash lookup on every event.
     svc._agent_id_hash = "testhash0000000"
+    svc._allow_unkeyed_agent_id = True  # no signing engine here: opt in to the test-only fallback
     return svc
 
 

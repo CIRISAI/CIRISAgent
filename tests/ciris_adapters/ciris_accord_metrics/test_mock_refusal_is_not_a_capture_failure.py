@@ -40,6 +40,7 @@ def _service(mock_guard: bool) -> AccordMetricsService:
         config={"consent_given": True, "consent_timestamp": "2026-01-01T00:00:00Z", "trace_level": "generic"}
     )
     svc._agent_id_hash = "testhash0000000"
+    svc._allow_unkeyed_agent_id = True  # no signing engine here: opt in to the test-only fallback
     svc._lens = RefusingLens()
     svc._lens_local_only = mock_guard
     return svc

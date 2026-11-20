@@ -703,9 +703,9 @@ def test_aspdma_result_reports_the_selection_not_the_override(base_step_data, mo
     )
 
     data = _create_conscience_execution_data(base_step_data, overridden, (selected,))
-    assert data.selected_action == str(HandlerActionType.SPEAK)
+    assert data.selected_action == "speak"  # the wire name, never str(enum) ("HandlerActionType.SPEAK")
     assert data.conscience_passed is False
 
     event = _create_aspdma_result_event(data, "2026-01-01T00:00:00+00:00", False, create_reasoning_event)
-    assert event.selected_action == str(HandlerActionType.SPEAK)
+    assert event.selected_action == "speak"
     assert event.action_rationale == "The user asked a question; answer it."

@@ -2231,44 +2231,6 @@
           "maxLength": 64,
           "x-ciris-min-level": "detailed"
         },
-        "facts": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "signed_guidance_in_force": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "x-ciris-min-level": "detailed"
-            },
-            "amendment_in_force": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "x-ciris-min-level": "detailed"
-            },
-            "id_scoped": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "x-ciris-min-level": "detailed"
-            },
-            "advisory_rule": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "x-ciris-min-level": "detailed"
-            }
-          },
-          "x-ciris-min-level": "detailed"
-        },
         "guard_violations": {
           "type": [
             "array",

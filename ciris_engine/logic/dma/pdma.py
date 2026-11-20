@@ -225,12 +225,13 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             }
 
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        position = pipeline_position_slot(*self._position_served(self._prompt_template_name))
         system = split_template(
             self._build_system_message_text,
             {**slots("sys:"), **position},
             prefix="instr:system",
             first_glue="",
+            locale=self.served_locale,
         )
         system = expand(system, "sys:ctx", context, language, id_prefix="sys:")
         # The agent's identity, approved amendments included: the same block every DMA reads
@@ -245,7 +246,9 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         system = concat(system, block(segment("instr:approval_facts", SegmentKind.STAGE_INSTRUCTION, approval_facts)), "\n\n")
         builder.message("system", *system)
 
-        user = split_template(self._build_user_message_text, slots(""), prefix="instr:user", first_glue="")
+        user = split_template(
+            self._build_user_message_text, slots(""), prefix="instr:user", first_glue="", locale=self.served_locale
+        )
         user = expand(user, "ctx", context, language)
         input_images = images or []
         if input_images:

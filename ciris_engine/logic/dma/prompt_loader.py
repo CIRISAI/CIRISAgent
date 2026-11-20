@@ -142,6 +142,8 @@ def _apply_research_overrides(template_name: str, collection: PromptCollection) 
         applied.append(field)
 
     if applied:
+        # Replaced fields are not the file's text, so the collection no longer has one served locale.
+        collection.served_language = None
         logger.warning(
             "[RESEARCH-OVERRIDES] DMA template %s: replaced %s",
             template_name,
@@ -435,6 +437,10 @@ class DMAPromptLoader:
                 elif key not in PromptCollection.model_fields and isinstance(value, str):
                     prompt_collection.custom_prompts[key] = value
 
+            # The locale of the file read; _apply_research_overrides clears it when it replaces any field.
+            prompt_collection.served_language = (
+                self.language if template_path.parent == self.localized_dir else DEFAULT_LANGUAGE
+            )
             return _apply_research_overrides(template_name, prompt_collection)
 
         except yaml.YAMLError as e:
@@ -445,19 +451,25 @@ class DMAPromptLoader:
             raise
 
     def pipeline_position(self, template_name: str) -> str:
+        """The paragraph alone (see :meth:`pipeline_position_served`)."""
+        return self.pipeline_position_served(template_name)[0]
+
+    def pipeline_position_served(self, template_name: str) -> Tuple[str, Optional[str]]:
         """The stage's pipeline-position paragraph (#1366 item 12), read from the ENGINE template.
 
         Never from an agent template's overrides: callers pass the loader's own collection, which no
         ``*_overrides`` key reaches (a research manifest still can: ``load_prompt_template`` applies it). A
         locale whose copy lacks the field gets the English one, so the segment is present in every language.
         """
-        text = self.load_prompt_template(template_name).pipeline_position
+        collection = self.load_prompt_template(template_name)
+        text, locale = collection.pipeline_position, collection.served_language
         # None: the locale's copy has no such field. "" (a research manifest replaced the field it was split out
         # of) is an answer, not an absence: no fallback.
         if text is None and self.language != DEFAULT_LANGUAGE:
             english = DMAPromptLoader(prompts_dir=str(self.prompts_dir), language=DEFAULT_LANGUAGE)
-            text = english.load_prompt_template(template_name).pipeline_position
-        return text or ""
+            fallback = english.load_prompt_template(template_name)
+            text, locale = fallback.pipeline_position, fallback.served_language
+        return text or "", locale
 
     def _position_of(self, template_data: PromptCollection) -> str:
         """``template_data``'s own paragraph, else the engine one for its component (English fallback)."""

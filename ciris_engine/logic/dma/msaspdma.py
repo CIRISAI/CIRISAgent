@@ -284,17 +284,21 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
     # ----------------------------------------------------- prompt assembly (#1366)
 
-    @staticmethod
-    def _guide_segments(guide: "List[Tuple[str, str]]", keep_empty: bool = False) -> List[Any]:
+    #: Guide blocks read from msaspdma.yml in this thought's language whatever the evaluator (``_graph_block``).
+    _GRAPH_KEYS = ("memory_model", "addressing_convention", "attribute_convention", "scope_convention")
+
+    def _guide_segments(self, guide: "List[Tuple[str, str]]", keep_empty: bool = False) -> List[Any]:
         """The guide's blocks as stage instructions (``keep_empty``: the join did not filter empty blocks)."""
         from ciris_engine.logic.prompt_assembly.segmenting import pipeline_position_segment
 
         # The pipeline position is its own segment, from its own template field (#1366 item 12).
         return [
             (
-                pipeline_position_segment(text)
+                pipeline_position_segment(text, locale=self._pipeline_position_locale())
                 if key == "pipeline_position"
-                else _seg(f"instr:{key}", "stage_instruction", text)
+                else _seg(f"instr:{key}", "stage_instruction", text).model_copy(
+                    update={"locale": self._graph_locale() if key in self._GRAPH_KEYS else self.served_locale}
+                )
             )
             for key, text in guide
             if text or keep_empty
@@ -389,13 +393,13 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             split_template,
             stripped_ends,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
 
         language = self.prompt_loader.language
         builder = PromptBuilder()
         # The frame every memory second pass shares, so the three cannot drift apart on what precedes their guide.
         builder.single("system", _seg("accord", "accord", get_localized_accord_text(language) or ""))
-        builder.single("system", _seg("instr:language", "stage_instruction", get_language_guidance(language) or ""))
+        builder.single("system", _seg("instr:language", "stage_instruction", get_language_guidance(language) or "").model_copy(update={"locale": language_guidance_locale(language)}))
         # Crisis resources ride directly after language guidance (#1248) — the
         # locale's verified numbers, from the one composer every DMA shares.
         builder.single(
@@ -412,7 +416,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
         template = self._require_prompt_value("context_integration")
         user, user_items = split_template(
-            lambda **values: template.format(**values), typed, prefix="instr:user", plain=plain
+            lambda **values: template.format(**values), typed, prefix="instr:user", plain=plain, locale=self.served_locale
         )
         sender = verified_sender_of(original_thought, context)
         if sender is not None:
@@ -452,6 +456,15 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             facts=policy_facts(authorization, agent_identity_of(context), id_scoped=False),
             language=self.prompt_loader.language,
         )
+
+    def _graph_locale(self) -> Optional[str]:
+        """Locale of the shared graph guide as served (msaspdma.yml, after any fallback)."""
+        loader = getattr(self, "prompt_loader", None)
+        try:
+            served = loader.load_prompt_template("msaspdma").served_language if loader is not None else None
+        except FileNotFoundError:
+            return None
+        return served if isinstance(served, str) else None
 
     def _graph_block(self, key: str) -> str:
         """A block of the shared graph guide, read from msaspdma.yml in this thought's language.

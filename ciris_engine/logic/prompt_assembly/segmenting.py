@@ -57,8 +57,12 @@ class SegmentationError(ValueError):
     """A block's parts did not rejoin to its legacy bytes."""
 
 
-def _instruction(segment_id: str, text: str, source: SegmentSource = SegmentSource.ENGINE) -> PromptSegment:
-    return PromptSegment(segment_id=segment_id, kind=SegmentKind.STAGE_INSTRUCTION, source=source, text=text)
+def _instruction(
+    segment_id: str, text: str, source: SegmentSource = SegmentSource.ENGINE, locale: Optional[str] = None
+) -> PromptSegment:
+    return PromptSegment(
+        segment_id=segment_id, kind=SegmentKind.STAGE_INSTRUCTION, source=source, text=text, locale=locale
+    )
 
 
 def items(segments: Sequence[PromptSegment], glue: str, first_glue: str = "\n\n") -> List[LayoutItem]:
@@ -74,6 +78,7 @@ def split_template(
     plain: Optional[Mapping[str, str]] = None,
     first_glue: str = "\n\n",
     instruction_source: SegmentSource = SegmentSource.ENGINE,
+    locale: Optional[str] = None,
 ) -> Segments:
     """Cut a template's render into instruction pieces and the given slot segments, in template order.
 
@@ -84,6 +89,9 @@ def split_template(
     ``plain`` slot values stay inside the instruction text (engine-built values such as a locale code).
     A slot used twice yields its segment twice, the second as ``<id>#2``. Raises SegmentationError when the cut
     does not rejoin to the real render (a template that transforms its values).
+
+    ``locale`` is the locale of the template file actually served (``PromptCollection.served_language``, after any
+    fallback): the instruction pieces record it. None when unknown (an agent template's own text).
     """
     plain = dict(plain or {})
     real = render(**plain, **{name: seg.text for name, seg in slots.items()})
@@ -98,7 +106,7 @@ def split_template(
     n = 0
     for match in _SENTINEL_RE.finditer(marked):
         if match.start() > cursor:
-            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()], instruction_source))
+            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()], instruction_source, locale))
             n += 1
         name = match.group(1)
         if name not in slots:
@@ -110,7 +118,7 @@ def split_template(
         segments.append(seg)
         cursor = match.end()
     if cursor < len(marked):
-        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:], instruction_source))
+        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:], instruction_source, locale))
     if "".join(s.text for s in segments) != real:
         raise SegmentationError(f"{prefix}: template pieces do not rejoin to the rendered template")
     return segments, items(segments, "", first_glue)
@@ -457,7 +465,16 @@ def round1_preamble(builder: "PromptBuilder", language: str, accord_mode: str) -
     from ciris_engine.logic.utils.localization import get_language_guidance, get_prohibition_guidance
 
     builder.single("system", segment("accord", SegmentKind.ACCORD, get_accord_text(accord_mode) or ""))
-    builder.single("system", _instruction("instr:language", get_language_guidance(language) or ""))
+    # Locale (FSD §8.1): the language guidance reports the locale it served; the crisis and prohibition blocks
+    # cannot (mixed registries and English framing defaults), so they stay unstated rather than claim one.
+    from ciris_engine.logic.utils.localization import language_guidance_locale
+
+    builder.single(
+        "system",
+        _instruction(
+            "instr:language", get_language_guidance(language) or "", locale=language_guidance_locale(language)
+        ),
+    )
     builder.single("system", _instruction("instr:crisis", get_crisis_resources_system_block(language) or ""))
     builder.single("system", _instruction("instr:prohibition", get_prohibition_guidance(language) or ""))
 
@@ -543,25 +560,29 @@ def segment(segment_id: str, kind: SegmentKind, text: str, source: SegmentSource
 PIPELINE_POSITION_ID = "instr:system:pipeline_position"
 
 
-def pipeline_position_segment(text: str, segment_id: str = PIPELINE_POSITION_ID) -> PromptSegment:
+def pipeline_position_segment(
+    text: str, segment_id: str = PIPELINE_POSITION_ID, locale: Optional[str] = None
+) -> PromptSegment:
     """The stage's ``pipeline_position`` field as its own segment (system trust, standing, engine source).
 
     Built from the template FIELD the caller read from the engine template, never found in rendered text: the
     paragraph's heading is translatable, so segmentation cannot depend on its wording.
     """
     return PromptSegment(
-        segment_id=segment_id, kind=SegmentKind.PIPELINE_POSITION, source=SegmentSource.ENGINE, text=text
+        segment_id=segment_id, kind=SegmentKind.PIPELINE_POSITION, source=SegmentSource.ENGINE, text=text, locale=locale
     )
 
 
-def pipeline_position_slot(text: Any) -> Dict[str, PromptSegment]:
+def pipeline_position_slot(text: Any, locale: Optional[str] = None) -> Dict[str, PromptSegment]:
     """``{"pipeline_position": segment}`` for :func:`split_template`, or ``{}`` when the paragraph is empty.
 
     Empty only when a research manifest replaced the field it was split out of (the render then omits it, so a
     sentinel for it would mark bytes the real render does not have).
     """
     # isinstance, not truthiness: tests substitute a Mock for the prompt loader.
-    return {"pipeline_position": pipeline_position_segment(text)} if isinstance(text, str) and text else {}
+    # isinstance for the locale too: a Mock loader's locale is not a string.
+    locale = locale if isinstance(locale, str) else None
+    return {"pipeline_position": pipeline_position_segment(text, locale=locale)} if isinstance(text, str) and text else {}
 
 
 def stripped_ends(segments: List[PromptSegment]) -> List[PromptSegment]:

@@ -266,6 +266,7 @@ class MemorizeHandler(BaseActionHandler):
         # The link this amendment follows (rc21 section 3): the verified profile chain's head.
         from ciris_engine.logic.context.identity_profile import chain_head_row_id, note_chain_link
 
+        await self._refresh_unverified_profile()
         prev, no_head = chain_head_row_id()
         if prev is None:
             self.logger.warning(
@@ -299,6 +300,29 @@ class MemorizeHandler(BaseActionHandler):
         note_chain_link(amendment_id)
         self.logger.info(f"Identity amendment {node.id}: signed row {amendment_id} (prev {prev})")
         return node.model_copy(update={"attributes": attributes})
+
+    async def _refresh_unverified_profile(self) -> None:
+        """Re-check the identity profile before reading its chain head, unless the last check was VERIFIED.
+
+        The head comes from the newest profile check, and a check runs on each context build. A base link the
+        Wise Authority approved after this thought's context was built would otherwise leave the head reading
+        the stale unanchored check, and the approved amendment would be refused for having no head (RATCHET runs
+        44776804283, 44780287540: the base link landed 0.3 s after the boot check). A VERIFIED check is kept: the
+        appended head (``note_chain_link``) already tracks links written since. Best effort.
+        """
+        from ciris_engine.logic.context.identity_profile import latest_identity_profile
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityProfileStatus
+
+        cached = latest_identity_profile()
+        if cached is not None and cached.status is IdentityProfileStatus.VERIFIED:
+            return
+        try:
+            from ciris_engine.logic.context.system_snapshot_helpers import _extract_agent_identity
+
+            memory: Any = self.bus_manager.memory  # the bus answers recall() as the context builders' service does
+            await _extract_agent_identity(memory)
+        except Exception as exc:  # noqa: BLE001 - the cached check stands; chain_head_row_id says why
+            self.logger.warning(f"identity profile re-check before an amendment failed ({type(exc).__name__})")
 
     def _refuse_amendment(
         self, thought: Thought, result: ActionSelectionDMAResult, reason_id: str, *, name_reason: bool

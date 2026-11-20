@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **An agent's own identity proposal reaches a Wise Authority.** An identity-scope MEMORIZE with no verified approval used to become a PONDER, so the agent's proposed wording never reached a WA (RATCHET run 44774304572). It still never runs the second pass and never stores anything (#1320). Instead it becomes a DEFER that carries the proposal: the exact proposed text and its M-1 justification, with a code-written summary. The WA approves those exact bytes. A write that states no wording still PONDERs.
+- **An approved amendment reads a fresh profile.** The chain head an amendment follows came from the newest profile check, and a base link the Wise Authority approved after that check left the head reading "unanchored". The approved amendment was then refused for having no head (RATCHET runs 44776804283, 44780287540). The memorize handler now re-checks the profile before reading the head unless the cached check is VERIFIED.
 - **The mock LLM's identity writes state an M-1 justification.** The mock never carried `m1_justification`, so on mock runs every WA-approved amendment was deferred back and the context map could never show an amendment land. The mock's identity-scope MEMORIZE and its MSASPDMA answer now carry one.
 
 ## [2.23.1-stable] - 2026-11-20

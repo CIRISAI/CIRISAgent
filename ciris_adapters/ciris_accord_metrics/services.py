@@ -234,6 +234,11 @@ class FailureStreak:
     last_error_message: str = ""
 
 
+from ciris_adapters.ciris_accord_metrics.context_manifest import (
+    CONTEXT_MANIFEST_FIELD,
+    SubjectPseudonymizer,
+    trace_context_manifest,
+)
 from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
 from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
 from ciris_engine.logic.utils.round_timing import RoundPhase, record_round_phase
@@ -661,6 +666,8 @@ class AccordMetricsService:
 
         # Agent ID for anonymization (set during start)
         self._agent_id_hash: Optional[str] = None
+        # Per-agent keyed pseudonyms for verified sender ids in LLM_CALL context manifests (context_manifest.py).
+        self._subject_pseudonymizer = SubjectPseudonymizer()
         # Agent name (human-readable identifier for traces at all levels)
         self._agent_name: Optional[str] = str(self._config.get("agent_name", "") or "")
 
@@ -2344,6 +2351,16 @@ class AccordMetricsService:
             # DETAILED: add prompt hash for dedup analysis without leaking content
             if is_detailed:
                 data["prompt_hash"] = event.get("prompt_hash")
+                # The call's context manifest (§5.10, context_manifest.py): which typed segments it carried. In
+                # `data`, so the trace signature covers it. Sender ids are per-agent pseudonyms below FULL.
+                context_manifest = trace_context_manifest(
+                    event.get(CONTEXT_MANIFEST_FIELD),
+                    detailed=is_detailed,
+                    full=is_full,
+                    pseudonymizer=self._subject_pseudonymizer,
+                )
+                if context_manifest is not None:
+                    data[CONTEXT_MANIFEST_FIELD] = context_manifest
             # FULL: full prompt + completion text
             if is_full:
                 data["prompt"] = event.get("prompt")

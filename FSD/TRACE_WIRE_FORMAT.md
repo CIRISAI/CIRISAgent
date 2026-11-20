@@ -889,6 +889,7 @@ provider invocation, success or failure. Emitted by
   "retry_count": 0,
 
   "prompt_hash": "0123abcd... (sha256 hex, 64 chars — DETAILED+)",
+  "context_manifest": { "call_id": "...", "stage": "aspdma", "segments": [ ... ], "subject_id_form": "hmac_sha256_16" },
   "prompt": "<full prompt text — FULL only>",
   "response_text": "<full completion text — FULL only>",
 
@@ -913,6 +914,7 @@ provider invocation, success or failure. Emitted by
 | `retry_count` | yes | LLMBus-level retry counter (0 = first attempt). |
 | `attempt_index` | yes | §6 — monotonic per (thought_id, event_type). |
 | `parent_event_type` | yes (2.7.9+) | The pipeline event_type whose execution issued this LLM call (e.g. `ASPDMA_RESULT`, `IDMA_RESULT`, `CONSCIENCE_RESULT`). Forms a non-forgeable parent-link with `parent_attempt_index` — see below. |
+| `context_manifest` | DETAILED+, when the call was assembled | §5.10.1 — the call's typed prompt segments (no content). Omitted at GENERIC and for calls not built by the PromptAssembler. |
 | `parent_attempt_index` | yes (2.7.9+) | The `attempt_index` of the parent pipeline event under the same `(thought_id, parent_event_type)` namespace. Together with `parent_event_type` and the parent CompleteTrace's `(agent_id_hash, trace_id, thought_id)`, uniquely identifies the parent row in the persistence layer. |
 
 **Parent-event linkage (item #5 of #712).** LLM_CALL events MUST carry
@@ -940,6 +942,44 @@ NOT advance the dedup index for that trace until the agent upgrades.
 The lens schema in `FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2` proposes a
 sibling `trace_llm_calls` table for these — query-friendly per-call
 rows rather than nesting them inside the parent component's data.
+
+#### 5.10.1 `context_manifest`
+
+The per-call context manifest (`PromptManifest`, `FSD/PROMPT_CONTEXT_PROVENANCE.md` §8) the prompt assembler
+built for this call: which typed segments it contained, each segment's kind, source, trust after taint,
+lifecycle, carriers (`authn` / `authz` / `acct`), its character span in the sent messages and the sha256 of
+those bytes, any stub sent in its place, the locale it was rendered in (§8.1 there), and every guard
+violation. It is **content-free by construction**: ids, digests, closed vocabulary and spans, never segment
+text. (`guard_violations[].detail` says why, never the segment's text.)
+
+Always named `context_manifest`. The constitution's `trace_manifest:v1` is a different object: the carrier for
+a trace too large to send inline.
+
+**Signed.** It is a member of the component's `data`, so it is inside the canonical signed bytes (§8) like
+`parent_event_type`: an aggregator cannot drop, swap or edit a call's context manifest without invalidating the
+trace signature.
+
+**Per level** (`ciris_adapters/ciris_accord_metrics/context_manifest.py`):
+
+| Level | `context_manifest` | `segments[*].authn.subject_id` | `subject_id_form` |
+|---|---|---|---|
+| `generic` | omitted | — | — |
+| `detailed` | present | per-agent pseudonym: first 16 hex of HMAC-SHA256 under a secret only this agent holds | `hmac_sha256_16` |
+| `full_traces` | present | the verified id | `raw` |
+
+The pseudonym is stable within one agent (one key per agent data directory, shared by its occurrences), cannot
+be reversed by dictionary (user ids are low-entropy), and does not link one person across agents. An unsalted
+hash would do neither. If the key cannot be read or created, the subject id is dropped and the form is
+`withheld`; it is never sent raw below `full_traces`. `authz.authorizer_id` names a Wise Authority, not a user,
+and ships as it is.
+
+**Egress.** Every field is typed in the egress schema (`egress_schema.CONTEXT_MANIFEST_SCHEMA`); none ships as
+opaque JSON. A field `PromptManifest` gains is dropped at egress (and logged) until it is listed there, and a
+test fails on any unlisted model field.
+
+**Size.** 5.7–11.6 KB per call at `detailed` (measured on the compose-golden stages: 13–28 segments each), so
+about 90–120 KB per full-pipeline thought, more with conscience retries. That is well inside the 1 MiB inline
+bound (CC 2.6.1.6); a trace over it takes the `trace_manifest:v1` chunked path like any other.
 
 ## 6. `attempt_index` semantics
 
@@ -981,8 +1021,8 @@ Three privacy/bandwidth tiers
 | Level | Includes | Excludes |
 |---|---|---|
 | `generic` | All numeric scores, booleans, identifiers, attempt_index, sizes (tokens + bytes), durations, cost. **No content text.** | Reasoning text, prompt text, response text, prompt hashes. |
-| `detailed` | Generic + reasoning text fields, override reasons, identified sources, sanitized stakeholder lists, prompt hashes. | Full prompt + response text. |
-| `full_traces` | Detailed + every prompt + every completion verbatim. | (nothing — full reasoning corpus) |
+| `detailed` | Generic + reasoning text fields, override reasons, identified sources, sanitized stakeholder lists, prompt hashes, LLM_CALL context manifests (sender ids pseudonymized, §5.10.1). | Full prompt + response text. |
+| `full_traces` | Detailed + every prompt + every completion verbatim; context manifests carry the verified sender id. | (nothing — full reasoning corpus) |
 
 `trace_level` is constant within a single batch envelope. An agent at
 `generic` cannot mix `full_traces` events.

@@ -217,6 +217,109 @@ def _json(level: TraceLevel = F) -> FieldSpec:
 # the builder is wrong and the enforcement log names it.
 # ---------------------------------------------------------------------------
 
+# The LLM_CALL ``context_manifest`` member (context_manifest.py; FSD/TRACE_WIRE_FORMAT.md §5.10). Every field
+# of PromptManifest, typed: it is content-free by construction (ids, digests, closed vocabulary, spans), so it
+# ships from DETAILED up, never at GENERIC, and never as opaque JSON. A field the model gains is dropped here
+# (and logged) until it is listed: tests/.../test_context_manifest_trace.py fails on an unlisted model field.
+CONTEXT_MANIFEST_MAX_SEGMENTS = 512
+CONTEXT_MANIFEST_MAX_VIOLATIONS = 64
+
+_CM_AUTHN: Dict[str, FieldSpec] = {
+    # A per-agent pseudonym at DETAILED, the verified id at FULL (context_manifest.py, subject_id_form).
+    "subject_id": _ident(),
+    "role": _tok(D),
+    "verifier": _ident(),
+}
+_CM_AUTHZ: Dict[str, FieldSpec] = {
+    "grant_kind": _tok(D),
+    "grant_id": _ident(),
+    "authorizer_id": _ident(),  # a Wise Authority id
+    "signature_verified": _bool(D),
+    "attestation_ids": _list(_ident()),
+    "granted_at": _ts(D),
+}
+_CM_ACCT: Dict[str, FieldSpec] = {
+    "audit_entry_id": _ident(),
+    "row_hash": _ident(),
+    "trace_id": _ident(),
+    "veto_id": _ident(),
+    "discharge_ids": _list(_ident()),
+}
+_CM_STUB: Dict[str, FieldSpec] = {
+    "kind": _tok(D),
+    "provenance": _tok(D),
+    "source": _tok(D),
+    "trust": _tok(D),
+    "author_role": _tok(D),
+    "authority": _tok(D),
+    "scope": _tok(D),
+    "disposition": _tok(D),
+    "transforms": _list(_tok(D)),
+    "draft_relation": _tok(D),
+    "quote_share": _tok(D),
+    "size": _tok(D),
+    "position": _tok(D),
+    "digest": _tok(D),
+}
+_CM_SEGMENT: Dict[str, FieldSpec] = {
+    "segment_id": _ident(),
+    "kind": _tok(D),
+    "provenance": _tok(D),
+    "source": _tok(D),
+    "trust": _tok(D),
+    "lifecycle": _tok(D),
+    "authn": _obj(_CM_AUTHN, D),
+    "authz": _obj(_CM_AUTHZ, D),
+    "acct": _obj(_CM_ACCT, D),
+    "message_index": _int(D),
+    "span_start": _int(D),
+    "span_end": _int(D),
+    "sha256": _tok(D),
+    "truncated": _bool(D),
+    "derived_from": _list(_ident()),
+    "form": _tok(D),
+    "stub": _obj(_CM_STUB, D),
+    "withheld_sha256": _tok(D),
+    # #1368 (FSD/PROMPT_CONTEXT_PROVENANCE.md §8.1): the locale the bytes were rendered in, and how that is known.
+    "locale": _tok(D),
+    "locale_basis": _tok(D),
+}
+_CM_VIOLATION: Dict[str, FieldSpec] = {
+    "kind": _tok(D),
+    "stage": _tok(D),
+    "policy_key": _ident(),
+    "segment_id": _ident(),
+    "detail": _reason(),  # why, never the segment's text (PromptManifest contract)
+    "action": _tok(D),
+}
+CONTEXT_MANIFEST_SCHEMA: Dict[str, FieldSpec] = {
+    "call_id": _ident(),
+    "task_id": _ident(),
+    "thought_id": _ident(),
+    "thought_kind": _tok(D),
+    "retry_index": _int(D),
+    "stage": _tok(D),
+    "stage_role": _tok(D),
+    "response_model": _ident(),
+    "max_tokens_sent": _int(D),
+    "policy_version": _int(D),
+    "policy_sha256": _tok(D),
+    "assembler_version": _ident(),
+    "guard_mode": _tok(D),
+    "guard_violations": _list(_obj(_CM_VIOLATION, D), max_items=CONTEXT_MANIFEST_MAX_VIOLATIONS),
+    "segments": _list(_obj(_CM_SEGMENT, D), max_items=CONTEXT_MANIFEST_MAX_SEGMENTS),
+    "messages_sha256": _tok(D),
+    "sent_messages_match": _bool(D),
+    "provider_capture": _tok(D),
+    "provider_mode": _ident(),
+    "provider_kwargs_added": _list(_ident()),
+    # #1368: the call's language and the segments whose stated locale differs from it.
+    "language": _tok(D),
+    "locale_fallbacks": _list(_ident(), max_items=CONTEXT_MANIFEST_MAX_SEGMENTS),
+    # context_manifest.py: which form segments[*].authn.subject_id shipped in.
+    "subject_id_form": _tok(D),
+}
+
 _IDMA_GENERIC: Dict[str, FieldSpec] = {
     "k_eff": _num(),
     "effective_source_count": _num(),
@@ -515,6 +618,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "parent_event_type": _tok(),
         "parent_attempt_index": _int(),
         "prompt_hash": _ident(),
+        "context_manifest": _obj(CONTEXT_MANIFEST_SCHEMA, D),
         "prompt": _text(),
         "response_text": _text(),
     },

@@ -317,3 +317,18 @@ def test_task_deliberation_keeps_full_ponder_and_defer_parameters():
     assert [g["action"] for g in got] == ["ponder", "defer"]
     assert long_reason in got[1]["action_parameters"]
     assert task_deliberation(ev, None) == []
+
+
+def test_the_agents_proposal_is_what_the_wa_approves():
+    import json as _json
+
+    from tools.qa_runner.modules.correction_episode_tests import m1_justification_of, proposed_amendment_of
+
+    proposal = {"kind": "amendment", "summary": "s", "proposed_text": " Ally files tickets only for @vance. ",
+                "m1_justification": "keeps the WA's rule coherent"}
+    d = {"context": {"identity_change": _json.dumps(proposal), "proposed_amendment": "flat"}}
+    assert proposed_amendment_of(d) == "Ally files tickets only for @vance."
+    assert m1_justification_of(d) == "keeps the WA's rule coherent"
+    assert proposed_amendment_of({"context": {"proposed_amendment": "flat only"}}) == "flat only"
+    assert proposed_amendment_of({"context": {}}) is None and proposed_amendment_of(None) is None
+    assert m1_justification_of({"context": {"identity_change": "not json"}}) is None

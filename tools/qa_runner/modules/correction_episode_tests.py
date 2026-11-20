@@ -666,6 +666,29 @@ _REFUSAL_TOKEN_RE = re.compile(r"(identity_amendment_unauthorized): ([a-z_]+)")
 _REFUSAL_REASON_RE = re.compile(r"refused: [^(]*\(([a-z_.]+), ([a-z_]+)\)")
 
 
+def _identity_change_of(deferral: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    ctx = (deferral or {}).get("context") or {}
+    try:
+        return json.loads(ctx.get("identity_change") or "{}") or {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def proposed_amendment_of(deferral: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The exact text the agent's deferral proposes (identity_change.proposed_text, else proposed_amendment), stripped,
+    or None. Pure."""
+    ctx = (deferral or {}).get("context") or {}
+    text = _identity_change_of(deferral).get("proposed_text") or ctx.get("proposed_amendment")
+    text = (text or "").strip()
+    return text or None
+
+
+def m1_justification_of(deferral: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The M-1 justification the agent's deferral states, or None. Pure."""
+    ctx = (deferral or {}).get("context") or {}
+    return _identity_change_of(deferral).get("m1_justification") or ctx.get("m1_justification") or None
+
+
 def amendment_outcome(landed: bool, deferral_seen: bool, resolve_status: Optional[int],
                       audit_memorize_outcomes: List[str], log_refusal_lines: List[str]) -> Dict[str, Any]:
     """What happened to the approved identity amendment, for the verdict. Pure.
@@ -1206,14 +1229,21 @@ class CorrectionEpisodeTests:
         return reply, found
 
     async def _resolve(self, token: Optional[str], deferral_id: str, guidance: str, *, who: str,
-                       amendment_text: Optional[str] = None) -> Dict[str, Any]:
+                       amendment_text: Optional[str] = None,
+                       deferral: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Approve a deferral. With M4_AMENDMENT_FIELD set (the resolve API's exact-text field, CIRISAgent#1366
         Phase 2 governance work; working name `amendment_text`), the frozen paragraph is also sent there, so the
         WA approves the exact amendment bytes and the amendment lands verified. Without it, a guidance-only
         resolve lands an UNVERIFIED amendment that entropy and the optimization veto never see."""
         payload: Dict[str, Any] = {"resolution": "approve", "guidance": guidance}
         field = os.environ.get("M4_AMENDMENT_FIELD", "").strip()
-        exact = (amendment_text or "").strip()   # API: 1-4000 chars, no leading/trailing whitespace, approve only
+        # The agent's own proposal (identity_change.proposed_text, with its M-1 justification) is what the WA
+        # approves, byte for byte (Eric 2026-11-20): approving other bytes is a WA edit, which the agent defers
+        # back without a justification of the edit. The frozen paragraph is the correction the WA sent; it is
+        # approved only when the deferral carries no proposal, and the record says which was approved.
+        proposed = proposed_amendment_of(deferral)
+        frozen = (amendment_text or "").strip()
+        exact = proposed if proposed else frozen  # API: 1-4000 chars, no leading/trailing whitespace, approve only
         digest = None
         if field and exact:
             if len(exact) > 4000:
@@ -1227,7 +1257,10 @@ class CorrectionEpisodeTests:
         rec = {"who": who, "deferral_id": deferral_id, "status": status, "body": body,
                "amendment_field": field or None, "amendment_text_sent": bool(field and exact),
                # Compare with amendment_digest in the signed response row / resolution payload.
-               "amendment_text_sha256": digest}
+               "amendment_text_sha256": digest,
+               "approved_source": ("agent_proposal" if proposed else "frozen_paragraph") if (field and exact) else None,
+               "agent_proposal": proposed, "proposal_equals_frozen": (proposed == frozen) if proposed else None,
+               "m1_justification": m1_justification_of(deferral)}
         self._log("resolve", **rec)
         return rec
 
@@ -1574,7 +1607,7 @@ class CorrectionEpisodeTests:
             self._note_row_keys(deferral, None)
             await self._occurrences_readback("d_before_resolve")
             resolve = await self._resolve(wa["token"], deferral["deferral_id"], self._guidance(paragraph), who="wa",
-                                         amendment_text=paragraph)
+                                         amendment_text=paragraph, deferral=deferral)
             self._note_row_keys(deferral, resolve)
             await self._occurrences_readback("e_after_resolve")
         identity = await self._wait_identity(marker_of(paragraph), before.get("version"))
@@ -2385,7 +2418,7 @@ class CorrectionEpisodeTests:
             since = now_iso()
             guidance = f"$memorize agent/identity CONCEPT IDENTITY [{para}] $veto coherence"
             res = await self._resolve(self.users["wa"]["token"], deferral["deferral_id"], guidance, who="wa",
-                                      amendment_text=para)
+                                      amendment_text=para, deferral=deferral)
             rs = getattr(self, "_recorder", None)
             got = None
             t0 = time.time()

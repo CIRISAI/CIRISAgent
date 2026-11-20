@@ -672,6 +672,8 @@ class AccordMetricsService:
         self._allow_unkeyed_agent_id = bool(self._config.get("allow_unkeyed_agent_id", False))
         self._key_derived_hash: Optional[str] = None
         self._events_refused_unkeyed = 0
+        # The production half of the signed run_kind (prod-managed / prod-personal), resolved once (_run_kind).
+        self._production_run_kind: Optional[str] = None
         # Per-agent keyed pseudonyms for verified sender ids in LLM_CALL context manifests (context_manifest.py).
         self._subject_pseudonymizer = SubjectPseudonymizer()
         # Agent name (human-readable identifier for traces at all levels)
@@ -734,6 +736,31 @@ class AccordMetricsService:
 
         kind = trace_run_kind()
         return None if kind == TraceRunKind.PRODUCTION else kind.value
+
+    def _run_kind(self) -> str:
+        """CC 3.1.5's signed ``run_kind``: production | prod-personal | prod-managed | qa | battery | mock.
+
+        A harness kind (``qa`` / ``battery``) or ``mock`` always wins (``_run_kind_marker``). Otherwise the run is
+        production, split by deployment: ``CIRIS_DEPLOYMENT_KIND=managed|personal`` when the operator sets it, else
+        ``prod-managed`` under CIRIS Manager (``is_managed``) and ``prod-personal`` elsewhere (user ruling
+        2026-10-14: managed vs personal is two more run kinds; the Manager sets managed, the operator can override).
+        ``deployment_type`` keeps its own value; this member does not replace it.
+        """
+        marker = self._run_kind_marker()
+        if marker:
+            return marker
+        if self._production_run_kind is None:
+            override = os.environ.get("CIRIS_DEPLOYMENT_KIND", "").strip().lower()
+            if override in ("managed", "personal"):
+                self._production_run_kind = f"prod-{override}"
+            else:
+                try:
+                    from ciris_engine.logic.utils.path_resolution import is_managed
+
+                    self._production_run_kind = "prod-managed" if is_managed() else "prod-personal"
+                except Exception:  # noqa: BLE001 - "production" is conformant when the split is unknown
+                    self._production_run_kind = "production"
+        return self._production_run_kind
 
     def _effective_deployment_type(self) -> str:
         """The ``deployment_type`` stamped on sealed traces (deployment_profile).
@@ -1495,7 +1522,7 @@ class AccordMetricsService:
             # event in every batch and every CEG seal therefore carries which
             # side of the CC 3.4.5 line the process ran on.
             "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
-            "data": self._enforce_egress_schema(event_type, self._extract_component_data(event_type, event)),
+            "data": self._signed_data(event_type, self._extract_component_data(event_type, event)),
         }
 
     def _build_and_capture(self, event_type: str, thought_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -1745,6 +1772,16 @@ class AccordMetricsService:
         if is_mock_llm_active():
             logger.info("[MOCK-GUARD] mock LLM latched after LensClient build; rebuilding as local-only")
             self._lens = self._build_lens_client()
+
+    def _signed_data(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """A component's ``data`` as it is signed: egress-filtered, then ``run_kind`` (CC 3.1.5).
+
+        ``run_kind`` goes in ``data`` because ``data`` is what the seal signs (FSD/TRACE_WIRE_FORMAT.md §8); a
+        top-level component field may not be.
+        """
+        signed = self._enforce_egress_schema(event_type, data)
+        signed["run_kind"] = self._run_kind()
+        return signed
 
     def _enforce_egress_schema(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Filter a built component to its level's egress schema, before signing.
@@ -2473,7 +2510,7 @@ class AccordMetricsService:
             "agent_id_hash": agent_id_hash,
             "task_id": request.task_id,
             "trace_level": self._trace_level.value,
-            "data": self._enforce_egress_schema("DEFERRAL_ROUTED", data),
+            "data": self._signed_data("DEFERRAL_ROUTED", data),
         }
         try:
             async with self._capture_lock:

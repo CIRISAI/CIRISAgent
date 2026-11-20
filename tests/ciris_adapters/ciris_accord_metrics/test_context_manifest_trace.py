@@ -349,3 +349,50 @@ async def test_a_key_derived_agent_id_hash_is_what_ships(monkeypatch: pytest.Mon
     await service._process_single_event(_llm_call_event())
     assert lens.components[0]["agent_id_hash"] == hashlib.sha256(pub).hexdigest()[:16]
     assert lens.components[0]["agent_id_hash"] != hashlib.sha256(b"datum").hexdigest()[:16]
+
+
+# --------------------------------------------------------------------------------------------- run_kind (CC 3.1.5)
+
+
+def _rk_service(monkeypatch: pytest.MonkeyPatch, marker: Any, managed: bool, override: str = "") -> AccordMetricsService:
+    import ciris_engine.logic.utils.path_resolution as paths
+
+    monkeypatch.setattr(paths, "is_managed", lambda: managed)
+    if override:
+        monkeypatch.setenv("CIRIS_DEPLOYMENT_KIND", override)
+    else:
+        monkeypatch.delenv("CIRIS_DEPLOYMENT_KIND", raising=False)
+    service = AccordMetricsService(config={"trace_level": "generic", "allow_unkeyed_agent_id": True})
+    monkeypatch.setattr(service, "_run_kind_marker", lambda: marker)
+    return service
+
+
+@pytest.mark.parametrize(
+    "marker,managed,override,expected",
+    [
+        (None, False, "", "prod-personal"),
+        (None, True, "", "prod-managed"),  # CIRIS Manager sets managed
+        (None, True, "personal", "prod-personal"),  # the operator overrides
+        (None, False, "managed", "prod-managed"),
+        ("qa", True, "", "qa"),  # a harness kind always wins
+        ("battery", False, "", "battery"),
+        ("mock", True, "managed", "mock"),  # mock wins over everything (refused at federation admission)
+    ],
+)
+def test_run_kind_values(monkeypatch: pytest.MonkeyPatch, marker: Any, managed: bool, override: str, expected: str) -> None:
+    from ciris_adapters.ciris_accord_metrics.egress_schema import RUN_KIND_VALUES
+
+    run_kind = _rk_service(monkeypatch, marker, managed, override)._run_kind()
+    assert run_kind == expected and run_kind in RUN_KIND_VALUES
+
+
+@pytest.mark.asyncio
+async def test_run_kind_is_in_every_components_signed_data_and_cannot_be_forged(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = _rk_service(monkeypatch, "qa", False)
+    lens = _FakeLens()
+    service._lens = lens
+    event = _llm_call_event()
+    event["run_kind"] = "production"  # a producer's own value never reaches the signed bytes
+    await service._process_single_event(event)
+    assert lens.components[0]["data"]["run_kind"] == "qa"
+    assert service._effective_deployment_type() == "qa"  # deployment_type keeps its existing meaning

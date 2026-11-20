@@ -62,6 +62,12 @@ def build() -> dict:
     cm_def["type"] = "object"
     d["definitions"]["ContextManifest"] = cm_def
     llm["properties"]["context_manifest"] = {"$ref": "#/definitions/ContextManifest", "x-ciris-min-level": "detailed"}
+    d["definitions"]["RunKind"] = {
+        "type": "string",
+        "enum": list(e.RUN_KIND_VALUES),
+        "description": "CC 3.1.5 run_kind, in every component's signed data; mock is refused at federation admission",
+    }
+    llm["properties"]["run_kind"] = {"$ref": "#/definitions/RunKind", "x-ciris-min-level": "generic"}
     d["definitions"]["LlmCallData"] = llm
     d["definitions"]["EgressAlterations"] = e.json_schema_for({"egress_alterations": e.ALTERATIONS_SPEC})["properties"][
         "egress_alterations"

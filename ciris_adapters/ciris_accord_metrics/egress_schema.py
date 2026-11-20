@@ -877,8 +877,14 @@ ALTERATIONS_SPEC = _list(
     G,
     max_items=ALTERATIONS_MAX + 1,
 )
+#: CC 3.1.5's run_kind, in every component's signed data. Written by the service after filtering
+#: (services._signed_data), closed vocabulary: production | prod-personal | prod-managed | qa | battery | mock.
+RUN_KIND_FIELD = "run_kind"
+RUN_KIND_VALUES = ("production", "prod-personal", "prod-managed", "qa", "battery", "mock")
+RUN_KIND_SPEC = _tok()
 for _event_fields in list(EVENT_SCHEMAS.values()) + [FALLBACK_SCHEMA]:
     _event_fields[ALTERATIONS_FIELD] = ALTERATIONS_SPEC
+    _event_fields[RUN_KIND_FIELD] = RUN_KIND_SPEC
 
 
 def schema_for(event_type: str) -> Dict[str, FieldSpec]:
@@ -888,13 +894,13 @@ def schema_for(event_type: str) -> Dict[str, FieldSpec]:
 def enforce_egress_schema(event_type: str, level: TraceLevel, data: Mapping[str, object]) -> EnforcementResult:
     """Filter ``data`` to what ``level`` allows for ``event_type``. Pure; does not log."""
     enforcer = _Enforcer(event_type, level)
-    cleaned = enforcer.fields(schema_for(event_type), {k: v for k, v in data.items() if k != ALTERATIONS_FIELD}, "")
+    cleaned = enforcer.fields(schema_for(event_type), {k: v for k, v in data.items() if k not in (ALTERATIONS_FIELD, RUN_KIND_FIELD)}, "")
     if enforcer.alterations:
         marks = enforcer.alterations[:ALTERATIONS_MAX]
         if len(enforcer.alterations) > ALTERATIONS_MAX:
             marks.append({"path": "*", "kind": "more", "original_length": len(enforcer.alterations) - ALTERATIONS_MAX})
         # In `data`, so the signature covers it: the signed record says what was cut, never silently altered.
-        cleaned[ALTERATIONS_FIELD] = marks  # type: ignore[assignment]
+        cleaned[ALTERATIONS_FIELD] = marks
     return EnforcementResult(data=cleaned, violations=enforcer.violations)
 
 

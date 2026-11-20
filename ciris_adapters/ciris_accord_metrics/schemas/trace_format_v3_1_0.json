@@ -1936,6 +1936,18 @@
       },
       "type": "object"
     },
+    "RunKind": {
+      "type": "string",
+      "enum": [
+        "production",
+        "prod-personal",
+        "prod-managed",
+        "qa",
+        "battery",
+        "mock"
+      ],
+      "description": "CC 3.1.5 run_kind, in every component's signed data; mock is refused at federation admission"
+    },
     "LlmCallData": {
       "type": "object",
       "additionalProperties": false,
@@ -2187,6 +2199,10 @@
             "x-ciris-min-level": "generic"
           },
           "maxItems": 65,
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
           "x-ciris-min-level": "generic"
         },
         "context_manifest": {

@@ -1,17 +1,47 @@
 # CIRIS Trace Wire Format Specification
 
 **For:** lens engineers building the persistence + query layer
-**Pinned to:** agent version 2.7.8, schema version `2.7.0`
+**Pinned to:** trace era `3.0.0` (JCS) as shipped; `3.1.0` adds LLM_CALL `context_manifest` (§5.10.1). §0 lists every
+place the sections below predate what ships, and the corrected rule.
 **Companion:** `FSD/TRACE_EVENT_LOG_PERSISTENCE.md` (persistence model)
 **Status:** definitive — generated from the schema modules referenced inline
 
 This document specifies the over-the-wire format the CIRIS agent emits to
-the lens. It is the contract. The agent module
+the lens. It is the contract. **Where a later section disagrees with §0, §0 wins**: it records what the code
+ships, cited to the line. The agent module
 `ciris_adapters/ciris_accord_metrics/services.py` is the implementation;
 `ciris_engine/schemas/services/runtime_control.py` defines every event
 class. Both are authoritative — this document mirrors them.
 
-## 1. Wire transport
+## 0. As shipped (3.0.0 era): corrections to the sections below
+
+Found by the trace Internet-Draft (draft-moore-scitt-ciris-trace, Appendix A "Divergences"). Each line states
+what ships and where. Items marked **changed** were code fixes made with this correction (CIRISAgent#1370);
+the rest correct the text.
+
+| Topic | As shipped | Where |
+|---|---|---|
+| Transport (§1, §2) | No HTTP shipping and no key registration. The agent hands each component to `ciris-lens-core` (`LensClient.capture_event`), which assembles, seals (JCS), signs with the persist Engine's federation signer and persists; delivery to the canonical is federation replication. §1–§2 describe the retired pre-2.9.6 wire (#857). | `services.py` `_build_and_capture` |
+| Schema version | `3.0.0`, stamped by lens-core at seal time; JCS (RFC 8785) canonical bytes. `3.1.0` from server 0.6 / persist v62.0. The `2.7.x` values below are history. | §8; `schemas/trace_format_v3_1_0.json` |
+| `trace_id` | Assigned by the substrate at seal; equals the `thought_id`. Not `trace-<thought_id>-<ts>`. | lens-core seal |
+| Envelope members | Also `pqc_key_id`, `pubkey_ml_dsa_65`, `signature_ml_dsa_65`: every trace signature is hybrid Ed25519 + ML-DSA-65 (100% PQC). | lens-core seal |
+| `agent_id_hash` | `sha256(signer pubkey)[:16]` only. **changed:** with no signing engine the component is refused (`events_refused_unkeyed_agent`), never captured under `sha256(name)` or `"unknown"`. | `services.py` `_capture_agent_id_hash` |
+| Event types | 15: the ten pipeline types plus `DEFERRAL_ROUTED`, `DEFERRAL_RECEIVED`, `DEFERRAL_RESOLVED`, `GRATITUDE_SIGNALED`, `CREDIT_GENERATED`. `DEFERRAL_ROUTED` capture is off by default (`CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS`). | `EVENT_TO_COMPONENT` |
+| Components per trace | No cap (a trace carries one component per captured event; LLM_CALL repeats per call). Component types: `observation`, `context`, `rationale`, `verb_second_pass`, `conscience`, `action`, `llm_call`, plus the five credit/deferral types. There is no `unknown` component type. | `EVENT_TO_COMPONENT` |
+| Run kind | Carried in `deployment_type`: `production` (implicit), `qa`, `battery`, `mock`. The constitution's own signed member is pending. | `services.py` run-kind marker |
+| Field enforcement | The emitter **filters before signing**: a field outside the level's schema is dropped, an over-long text is truncated, an over-long list is cut, each counted and logged. (The constitution states refuse-never-truncate; the conflict is open.) | `egress_schema.py` |
+| Reasoning text | Reasoning chains (`action_rationale`, `reasoning_summary`, DMA `reasoning`, second-pass `original_reasoning` / `final_reasoning`) are `full_traces`. `detailed` carries short reasons only (override and conscience reasons, defer reason, capped at 500 chars). | `egress_schema.py` |
+| `base_url`, `dsdma_domain` | `detailed`, not `generic`. | `egress_schema.py` |
+| LLM_CALL members | Also `sent_temperature`, `sent_seed`, `sent_max_tokens`, `served_by`, `served_model` (generic), and `context_manifest` (detailed+, §5.10.1). | `services.py` LLM_CALL builder |
+| Parent link | `parent_event_type` is omitted when the issuing step is unknown (the `UNKNOWN_PARENT` sentinel never reaches the wire; persist's column is an optional enum). | `services.py` LLM_CALL builder |
+| `selected_action`, `final_action` | The action's value, e.g. `speak`. **changed:** these carried `HandlerActionType.SPEAK` (`str(enum)`) before #1370. | `step_decorators._action_name` |
+| `thought_type` | `ThoughtType` values: `standard`, `follow_up`, `error`, `observation`, `memory`, `deferred`, `ponder`, `feedback`, `guidance`, and others in the enum. Not `seed` / `retry`. | `schemas/runtime/enums.py` |
+| `attestation_status` | Includes `partial` (as emitted, and in §5.2.1's own example). | CIRISVerify attestation |
+| `audit_entry_hash` | Base64, not hex. | ACTION_RESULT |
+| Once-per-thought events (§6) | `THOUGHT_START`, `SNAPSHOT_AND_CONTEXT`, `DMA_RESULTS`, `IDMA_RESULT`, `ACTION_RESULT`. There is no `ROUND_COMPLETE`. | §6 |
+| Component order | Receipt order at the adapter. It is not pipeline order: an LLM_CALL for action selection can precede the evaluators' `DMA_RESULTS`, and timestamps are not monotonic. Order by `(event_type, attempt_index)`, never by `timestamp`. | §3, §6 |
+
+## 1. Wire transport (retired; see §0)
 
 **Endpoint:** `POST <CIRIS_ACCORD_METRICS_ENDPOINT>/accord/events`
 
@@ -113,14 +143,14 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `trace_id` | string | yes | Format `trace-<thought_id>-<YYYYMMDDHHMMSS>`. Globally unique per agent. |
+| `trace_id` | string | yes | Assigned by the substrate at seal; as shipped it equals `thought_id` (§0). |
 | `thought_id` | string | yes | Anchors all `TraceComponent` rows back to one CIRIS thought. |
 | `task_id` | string \| null | optional | Not all internal thoughts (system probes) have parent tasks. |
-| `agent_id_hash` | string | yes | First 16 hex characters (8 bytes) of `sha256(public_key_bytes)`, lowercase. **Canonical derivation**: `hashlib.sha256(public_key_bytes).hexdigest()[:16]` over the agent's Ed25519 signing key bytes. Same value `ciris-persist v0.2.2+` uses for AV-9 dedup gating; same value PoB §3.2 uses for Reticulum addressing. One definition serves identity, transport, and dedup — implementations MUST use exactly this derivation so the values are interchangeable across consumers. Pseudonymous: invertible only by an attacker who already holds the public key. |
+| `agent_id_hash` | string | yes | First 16 hex characters (8 bytes) of `sha256(public_key_bytes)`, lowercase. **Canonical derivation**: `hashlib.sha256(public_key_bytes).hexdigest()[:16]` over the agent's Ed25519 signing key bytes. Same value `ciris-persist v0.2.2+` uses for AV-9 dedup gating; same value PoB §3.2 uses for Reticulum addressing. One definition serves identity, transport, and dedup — implementations MUST use exactly this derivation so the values are interchangeable across consumers. Pseudonymous: invertible only by an attacker who already holds the public key. No fallback: without the signing key nothing is captured (§0). |
 | `started_at` | ISO-8601 | yes | When the first component event arrived at the adapter. |
 | `completed_at` | ISO-8601 | yes (post-seal) | When `ACTION_RESULT` fired. **A trace is only sealed and shipped when ACTION_RESULT fires** — no action means it never happened (see §10). |
 | `trace_level` | enum | yes | `generic`, `detailed`, or `full_traces`. Same value as the batch envelope. |
-| `trace_schema_version` | string | yes | Currently `"2.7.9"`. Version-gate consumers on this. |
+| `trace_schema_version` | string | yes | `"3.0.0"` as shipped, `"3.1.0"` from server 0.6 (§0). Version-gate consumers on this. |
 | `deployment_profile` | object | **yes at 2.7.9+** | Cohort taxonomy block — 6 fields declaring agent identity / operator design choices. See §3.2 for full enums + migration defaults. Persistence MUST reject 2.7.9-shaped traces missing this block; agents lacking explicit operator config emit migration defaults (§3.2). |
 | `components` | array | yes | Ordered components — see §4. |
 | `signature` | base64 | yes | Ed25519 signature over the canonical payload (§8). |
@@ -996,8 +1026,7 @@ populated by the adapter
 
 - Monotonic per `(thought_id, event_type)`, starting at 0.
 - For events that broadcast at most once per thought (THOUGHT_START,
-  SNAPSHOT_AND_CONTEXT, DMA_RESULTS, IDMA_RESULT, ACTION_RESULT,
-  ROUND_COMPLETE) → always 0.
+  SNAPSHOT_AND_CONTEXT, DMA_RESULTS, IDMA_RESULT, ACTION_RESULT) → always 0.
 - For events that broadcast N times per thought (LLM_CALL,
   CONSCIENCE_RESULT, ASPDMA_RESULT, future recursive variants) →
   increments with each broadcast in receipt order.
@@ -1028,8 +1057,8 @@ Three privacy/bandwidth tiers
 | Level | Includes | Excludes |
 |---|---|---|
 | `generic` | All numeric scores, booleans, identifiers, attempt_index, sizes (tokens + bytes), durations, cost. **No content text.** | Reasoning text, prompt text, response text, prompt hashes. |
-| `detailed` | Generic + reasoning text fields, override reasons, identified sources, sanitized stakeholder lists, prompt hashes, LLM_CALL context manifests (sender ids pseudonymized, §5.10.1). | Full prompt + response text. |
-| `full_traces` | Detailed + every prompt + every completion verbatim; context manifests carry the verified sender id. | (nothing — full reasoning corpus) |
+| `detailed` | Generic + short reasons (override, conscience and defer reasons, ≤500 chars), identified sources, sanitized stakeholder lists, prompt hashes, `base_url`, `dsdma_domain`, LLM_CALL context manifests (sender ids pseudonymized, §5.10.1). | Reasoning chains, full prompt + response text. |
+| `full_traces` | Detailed + reasoning chains (rationale, reasoning summaries, DMA reasoning, second-pass reasoning) + every prompt + every completion verbatim; context manifests carry the verified sender id. | (nothing — full reasoning corpus) |
 
 `trace_level` is constant within a single batch envelope. An agent at
 `generic` cannot mix `full_traces` events.

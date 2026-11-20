@@ -396,3 +396,54 @@ async def test_run_kind_is_in_every_components_signed_data_and_cannot_be_forged(
     await service._process_single_event(event)
     assert lens.components[0]["data"]["run_kind"] == "qa"
     assert service._effective_deployment_type() == "qa"  # deployment_type keeps its existing meaning
+
+
+# --------------------------------------------------------------------------------------------- every event, pinned schema
+
+
+def _component(event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "component_type": AccordMetricsService.EVENT_TO_COMPONENT[event_type],
+        "event_type": event_type,
+        "timestamp": "2026-11-19T00:00:00+00:00",
+        "data": data,
+    }
+
+
+def _component_validator() -> Any:
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = _published()
+    return jsonschema, {**schema["definitions"]["TraceComponent"], "definitions": schema["definitions"]}
+
+
+def test_every_events_signed_data_validates_against_the_pinned_schema() -> None:
+    """CC 3.1.5: an admitter holding the pinned schema must not refuse what the emitter signs, at any level,
+    including run_kind and egress_alterations."""
+    from tests.ciris_adapters.ciris_accord_metrics.test_egress_schema import VALID
+
+    jsonschema, component_schema = _component_validator()
+    checked = 0
+    for level, events in VALID.items():
+        for event_type, data in events.items():
+            noisy = {**data, "not_a_field": "x"}  # leaves an egress_alterations mark
+            signed = enforce_egress_schema(event_type, level, noisy).data
+            signed["run_kind"] = "prod-personal"
+            assert "egress_alterations" in signed
+            jsonschema.validate(_component(event_type, signed), component_schema)
+            checked += 1
+    assert checked >= 10
+
+
+def test_the_pinned_schema_refuses_an_unknown_member_or_a_missing_run_kind() -> None:
+    jsonschema, component_schema = _component_validator()
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            _component("ACTION_RESULT", {"tokens_total": 3, "run_kind": "qa", "user_message": "hi"}),
+            component_schema,
+        )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(_component("ACTION_RESULT", {"tokens_total": 3}), component_schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            _component("ACTION_RESULT", {"tokens_total": 3, "run_kind": "staging"}), component_schema
+        )

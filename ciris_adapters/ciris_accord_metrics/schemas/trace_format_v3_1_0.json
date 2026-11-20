@@ -140,1041 +140,472 @@
         },
         "data": {
           "type": "object",
-          "description": "Component-specific data (see component schemas)"
+          "description": "Component data, by event_type (the <Event>Data definitions); signed (FSD §8)"
         },
         "agent_id_hash": {
           "type": "string",
           "description": "sha256(signer pubkey)[:16], denormalized from the envelope; MUST equal the trace's"
         }
-      }
-    },
-    "ThoughtStartData": {
-      "type": "object",
-      "description": "THOUGHT_START component data",
-      "properties": {
-        "thought_id": {
-          "type": "string"
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ACTION_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/ActionResultData"
+              }
+            }
+          }
         },
-        "task_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/AspdmaResultData"
+              }
+            }
+          }
         },
-        "thought_type": {
-          "type": "string",
-          "enum": [
-            "seed",
-            "follow_up",
-            "retry"
-          ]
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "CONSCIENCE_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/ConscienceResultData"
+              }
+            }
+          }
         },
-        "thought_status": {
-          "type": "string"
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DEFERRAL_ROUTED"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/DeferralRoutedData"
+              }
+            }
+          }
         },
-        "round_number": {
-          "type": "integer",
-          "minimum": 0
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DMA_RESULTS"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/DmaResultsData"
+              }
+            }
+          }
         },
-        "thought_depth": {
-          "type": "integer",
-          "minimum": 0
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "IDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/IdmaResultData"
+              }
+            }
+          }
         },
-        "parent_thought_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "LLM_CALL"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/LlmCallData"
+              }
+            }
+          }
         },
-        "task_description": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "SNAPSHOT_AND_CONTEXT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/SnapshotAndContextData"
+              }
+            }
+          }
         },
-        "task_priority": {
-          "type": "integer"
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "THOUGHT_START"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/ThoughtStartData"
+              }
+            }
+          }
         },
-        "channel_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "TSASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/TsaspdmaResultData"
+              }
+            }
+          }
         },
-        "updated_info_available": {
-          "type": "boolean"
-        },
-        "thought_content": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces",
-          "maxLength": 500
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "VERB_SECOND_PASS_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/VerbSecondPassResultData"
+              }
+            }
+          }
         }
-      }
+      ]
     },
-    "SnapshotContextData": {
-      "type": "object",
-      "description": "SNAPSHOT_AND_CONTEXT component data",
-      "properties": {
-        "agent_name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "cognitive_state": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "wakeup",
-            "work",
-            "play",
-            "solitude",
-            "dream",
-            "shutdown",
-            null
-          ]
-        },
-        "system_snapshot": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
+    "RunKind": {
+      "type": "string",
+      "enum": [
+        "production",
+        "prod-personal",
+        "prod-managed",
+        "qa",
+        "battery",
+        "mock"
+      ],
+      "description": "CC 3.1.5 run_kind, in every component's signed data; mock is refused at federation admission"
     },
-    "DmaResultsData": {
-      "type": "object",
-      "description": "DMA_RESULTS component data",
-      "properties": {
-        "csdma": {
-          "$ref": "#/definitions/CsdmaResult"
-        },
-        "dsdma": {
-          "$ref": "#/definitions/DsdmaResult"
-        },
-        "pdma": {
-          "$ref": "#/definitions/PdmaResult"
-        },
-        "idma": {
-          "$ref": "#/definitions/IdmaResult"
-        },
-        "combined_analysis": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
-    },
-    "CsdmaResult": {
+    "EgressAlterations": {
       "type": [
-        "object",
+        "array",
         "null"
       ],
-      "description": "Common Sense DMA result",
-      "properties": {
-        "plausibility_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "flags": {
-          "type": "array",
-          "items": {
-            "type": "string"
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256,
+            "x-ciris-min-level": "generic"
           },
-          "level": "detailed"
-        },
-        "reasoning": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "prompt_used": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
-    },
-    "DsdmaResult": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "description": "Domain Specific DMA result",
-      "properties": {
-        "domain": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "domain_alignment": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "flags": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "generic"
           },
-          "level": "detailed"
-        },
-        "reasoning": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "prompt_used": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
-    },
-    "PdmaResult": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "description": "Principled DMA (Ethical) result",
-      "properties": {
-        "stakeholders": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "conflicts": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "alignment_check": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "reasoning": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "prompt_used": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
-    },
-    "IdmaResult": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "description": "Intuition DMA (CCA) result",
-      "properties": {
-        "k_eff": {
-          "type": "number",
-          "description": "Effective independent sources k/(1+ρ(k-1))"
-        },
-        "effective_source_count": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "description": "Plain-language alias for k_eff"
-        },
-        "correlation_risk": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Source correlation ρ"
-        },
-        "source_overlap": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Plain-language alias for correlation_risk"
-        },
-        "fragility_flag": {
-          "type": "boolean",
-          "description": "True if k_eff < 2 (fragile)"
-        },
-        "reasoning_is_fragile": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Plain-language alias for fragility_flag"
-        },
-        "phase": {
-          "type": "string",
-          "enum": [
-            "chaos",
-            "healthy",
-            "rigidity"
-          ]
-        },
-        "reasoning_state": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Plain-language alias for phase"
-        },
-        "k_raw": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed",
-          "description": "Nominal raw source count k before correlation adjustment"
-        },
-        "raw_source_count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed",
-          "description": "Plain-language alias for k_raw"
-        },
-        "rho_mean": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "level": "detailed",
-          "description": "Average pairwise correlation ρ used to derive k_eff"
-        },
-        "phase_confidence": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "level": "detailed"
-        },
-        "collapse_margin": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed",
-          "description": "Positive distance from the fragility boundary; <= 0 indicates collapse-adjacent state"
-        },
-        "safety_margin": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed",
-          "description": "Plain-language alias for collapse_margin"
-        },
-        "sources_identified": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "original_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-ciris-min-level": "generic"
           },
-          "level": "detailed"
-        },
-        "source_ids": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "source_types": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "source_independence_scores": {
-          "type": "array",
-          "items": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "level": "detailed"
-        },
-        "source_type_counts": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "correlation_factors": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "top_correlation_factors": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "pairwise_correlation_summary": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "rho_intra": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "level": "detailed"
-        },
-        "rho_inter": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "level": "detailed"
-        },
-        "module_count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "effective_module_count": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "source_clusters": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "common_cause_flags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "intervention_recommendation": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "next_best_recovery_step": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "delta_k_eff": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "delta_rho_mean": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": -1,
-          "maximum": 1,
-          "level": "detailed"
-        },
-        "phase_persistence_steps": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "time_in_fragile_state_ms": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "moving_variance": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "rho_critical": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1,
-          "level": "detailed"
-        },
-        "k_required": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "defense_function": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "collapse_rate": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "time_to_truth": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "time_to_entropy": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "time_to_capture": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "level": "detailed"
-        },
-        "reasoning": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "prompt_used": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
-    },
-    "AspdmaResultData": {
-      "type": "object",
-      "description": "ASPDMA_RESULT component data",
-      "properties": {
-        "selected_action": {
-          "type": "string",
-          "enum": [
-            "SPEAK",
-            "TOOL",
-            "MEMORIZE",
-            "FORGET",
-            "RECALL",
-            "OBSERVE",
-            "PONDER",
-            "DEFER",
-            "REJECT",
-            "TASK_COMPLETE"
-          ]
-        },
-        "selection_confidence": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "is_recursive": {
-          "type": "boolean",
-          "default": false
-        },
-        "alternatives_considered": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "evaluation_time_ms": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "action_rationale": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "reasoning_summary": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "action_parameters": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "aspdma_prompt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "raw_llm_response": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 1000,
-          "level": "full_traces"
-        }
-      }
-    },
-    "ConscienceResultData": {
-      "type": "object",
-      "description": "CONSCIENCE_RESULT component data",
-      "required": [
-        "conscience_passed"
-      ],
-      "properties": {
-        "conscience_passed": {
-          "type": "boolean"
-        },
-        "action_was_overridden": {
-          "type": "boolean",
-          "default": false
-        },
-        "ethical_faculties_skipped": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "updated_status_detected": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "thought_depth_triggered": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "thought_depth_current": {
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "thought_depth_max": {
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "entropy_level": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "coherence_level": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "entropy_passed": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"
-        },
-        "entropy_score": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "entropy_threshold": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "coherence_passed": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"
-        },
-        "coherence_score": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "coherence_threshold": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "optimization_veto_passed": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"
-        },
-        "optimization_veto_entropy_ratio": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "epistemic_humility_passed": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"
-        },
-        "epistemic_humility_certainty": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "final_action": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "conscience_override_reason": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "entropy_reason": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "coherence_reason": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "detailed"
-        },
-        "optimization_veto_decision": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "proceed",
-            "abort",
-            "defer",
-            null
-          ],
-          "level": "detailed"
-        },
-        "optimization_veto_affected_values": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "epistemic_humility_uncertainties": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "level": "detailed"
-        },
-        "epistemic_humility_recommendation": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "proceed",
-            "ponder",
-            "defer",
-            null
-          ],
-          "level": "detailed"
-        },
-        "epistemic_data": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "updated_status_content": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "optimization_veto_justification": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        },
-        "epistemic_humility_justification": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "level": "full_traces"
-        }
-      }
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "generic"
+          }
+        },
+        "x-ciris-min-level": "generic"
+      },
+      "maxItems": 65,
+      "x-ciris-min-level": "generic"
     },
     "ActionResultData": {
       "type": "object",
-      "description": "ACTION_RESULT component data",
+      "additionalProperties": false,
       "properties": {
         "execution_success": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "execution_time_ms": {
           "type": [
             "number",
             "null"
-          ]
+          ],
+          "x-ciris-min-level": "generic"
         },
         "tokens_input": {
-          "type": "integer",
-          "minimum": 0
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "tokens_output": {
-          "type": "integer",
-          "minimum": 0
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "tokens_total": {
-          "type": "integer",
-          "minimum": 0
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "cost_cents": {
-          "type": "number",
-          "minimum": 0
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "carbon_grams": {
-          "type": "number",
-          "minimum": 0
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "energy_mwh": {
-          "type": "number",
-          "minimum": 0
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "llm_calls": {
-          "type": "integer",
-          "minimum": 0
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "audit_sequence_number": {
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "x-ciris-min-level": "generic"
         },
         "audit_entry_hash": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "generic"
         },
         "has_positive_moment": {
-          "type": "boolean",
-          "description": "True if positive moment/gratitude was expressed"
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "has_execution_error": {
-          "type": "boolean",
-          "description": "True if execution error occurred"
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "success": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
         },
         "action_executed": {
           "type": [
             "string",
             "null"
           ],
-          "level": "detailed"
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
         },
         "follow_up_thought_id": {
           "type": [
             "string",
             "null"
           ],
-          "level": "detailed"
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
         },
         "audit_entry_id": {
           "type": [
             "string",
             "null"
           ],
-          "level": "detailed"
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
         },
         "models_used": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
           },
-          "level": "detailed"
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
         },
         "api_bases_used": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "maxLength": 256,
+            "x-ciris-min-level": "detailed"
           },
-          "level": "detailed"
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
         },
         "execution_error": {
           "type": [
             "string",
             "null"
           ],
-          "level": "detailed"
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
         },
         "audit_signature": {
           "type": [
             "string",
             "null"
           ],
-          "level": "detailed"
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 256,
+          "x-ciris-min-level": "detailed"
         },
         "action_parameters": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "level": "full_traces"
+          "x-ciris-min-level": "full_traces"
         },
         "positive_moment": {
           "type": [
@@ -1182,10 +613,1509 @@
             "null"
           ],
           "maxLength": 500,
-          "level": "full_traces",
-          "description": "Full text of gratitude/positive moment"
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
         }
-      }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "AspdmaResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selected_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "selection_confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "is_recursive": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "alternatives_considered": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "evaluation_time_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "action_rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "reasoning_summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "action_parameters": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "aspdma_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "aspdma_system_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "raw_llm_response": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "ConscienceResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "conscience_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "action_was_overridden": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "ethical_faculties_skipped": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "is_recursive": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "updated_status_detected": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "thought_depth_triggered": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "thought_depth_current": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "thought_depth_max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "entropy_level": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "coherence_level": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "entropy_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "entropy_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "entropy_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "coherence_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "coherence_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "coherence_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "optimization_veto_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "optimization_veto_entropy_ratio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "epistemic_humility_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "epistemic_humility_certainty": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "final_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "conscience_override_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "entropy_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "coherence_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "optimization_veto_decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "optimization_veto_affected_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "epistemic_humility_uncertainties": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "epistemic_humility_recommendation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "epistemic_data": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "updated_status_content": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "optimization_veto_justification": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "epistemic_humility_justification": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "DeferralRoutedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defer_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "x-ciris-min-level": "generic"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "DmaResultsData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "csdma": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "plausibility_score": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "flags": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "reasoning": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            },
+            "prompt_used": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            }
+          },
+          "x-ciris-min-level": "generic"
+        },
+        "dsdma": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "domain_alignment": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "domain": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64,
+              "x-ciris-min-level": "detailed"
+            },
+            "flags": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "reasoning": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            },
+            "prompt_used": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            }
+          },
+          "x-ciris-min-level": "generic"
+        },
+        "pdma": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "has_conflicts": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "stakeholders": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "conflicts": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500,
+              "x-ciris-min-level": "detailed"
+            },
+            "alignment_check": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500,
+              "x-ciris-min-level": "detailed"
+            },
+            "reasoning": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            },
+            "prompt_used": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            }
+          },
+          "x-ciris-min-level": "generic"
+        },
+        "idma": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "k_eff": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "effective_source_count": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "correlation_risk": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "source_overlap": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "fragility_flag": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "reasoning_is_fragile": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "phase": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64,
+              "x-ciris-min-level": "generic"
+            },
+            "reasoning_state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64,
+              "x-ciris-min-level": "generic"
+            },
+            "k_raw": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "raw_source_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "rho_mean": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "phase_confidence": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "collapse_margin": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "safety_margin": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "sources_identified": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "source_ids": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "source_types": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "source_independence_scores": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "source_type_counts": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "correlation_factors": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "top_correlation_factors": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "pairwise_correlation_summary": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "rho_intra": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "rho_inter": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "module_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "effective_module_count": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "source_clusters": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "common_cause_flags": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "x-ciris-min-level": "detailed"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "detailed"
+            },
+            "intervention_recommendation": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500,
+              "x-ciris-min-level": "detailed"
+            },
+            "next_best_recovery_step": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500,
+              "x-ciris-min-level": "detailed"
+            },
+            "delta_k_eff": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "delta_rho_mean": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "phase_persistence_steps": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "time_in_fragile_state_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "moving_variance": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "rho_critical": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "k_required": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "defense_function": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "collapse_rate": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "time_to_truth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "time_to_entropy": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "time_to_capture": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "x-ciris-min-level": "detailed"
+            },
+            "reasoning": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            },
+            "prompt_used": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536,
+              "x-ciris-min-level": "full_traces"
+            }
+          },
+          "x-ciris-min-level": "generic"
+        },
+        "csdma_plausibility_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "dsdma_domain_alignment": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "dsdma_domain": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "combined_analysis": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "IdmaResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "k_eff": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "effective_source_count": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "correlation_risk": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "source_overlap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "fragility_flag": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "reasoning_is_fragile": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "reasoning_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "idma_k_eff": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "idma_correlation_risk": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "idma_fragility_flag": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "idma_phase": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "k_raw": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "raw_source_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "rho_mean": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "phase_confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "collapse_margin": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "safety_margin": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "sources_identified": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "source_ids": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "source_types": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "source_independence_scores": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "source_type_counts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "correlation_factors": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "top_correlation_factors": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "pairwise_correlation_summary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "rho_intra": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "rho_inter": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "module_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "effective_module_count": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "source_clusters": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "common_cause_flags": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "intervention_recommendation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "next_best_recovery_step": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "delta_k_eff": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "delta_rho_mean": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "phase_persistence_steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "time_in_fragile_state_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "moving_variance": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "rho_critical": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "k_required": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "defense_function": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "collapse_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "time_to_truth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "time_to_entropy": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "time_to_capture": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-ciris-min-level": "detailed"
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "prompt_used": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
     },
     "ContextManifest": {
       "additionalProperties": false,
@@ -1936,18 +2866,6 @@
       },
       "type": "object"
     },
-    "RunKind": {
-      "type": "string",
-      "enum": [
-        "production",
-        "prod-personal",
-        "prod-managed",
-        "qa",
-        "battery",
-        "mock"
-      ],
-      "description": "CC 3.1.5 run_kind, in every component's signed data; mock is refused at federation admission"
-    },
     "LlmCallData": {
       "type": "object",
       "additionalProperties": false,
@@ -2151,54 +3069,7 @@
           "x-ciris-min-level": "full_traces"
         },
         "egress_alterations": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "path": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 256,
-                "x-ciris-min-level": "generic"
-              },
-              "kind": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
-                "maxLength": 64,
-                "x-ciris-min-level": "generic"
-              },
-              "original_length": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "x-ciris-min-level": "generic"
-              },
-              "sha256": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
-                "maxLength": 64,
-                "x-ciris-min-level": "generic"
-              }
-            },
-            "x-ciris-min-level": "generic"
-          },
-          "maxItems": 65,
+          "$ref": "#/definitions/EgressAlterations",
           "x-ciris-min-level": "generic"
         },
         "run_kind": {
@@ -2209,58 +3080,716 @@
           "$ref": "#/definitions/ContextManifest",
           "x-ciris-min-level": "detailed"
         }
-      }
-    },
-    "EgressAlterations": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "path": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 256,
-            "x-ciris-min-level": "generic"
-          },
-          "kind": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
-            "maxLength": 64,
-            "x-ciris-min-level": "generic"
-          },
-          "original_length": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "x-ciris-min-level": "generic"
-          },
-          "sha256": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
-            "maxLength": 64,
-            "x-ciris-min-level": "generic"
-          }
-        },
-        "x-ciris-min-level": "generic"
       },
-      "maxItems": 65,
-      "x-ciris-min-level": "generic"
+      "required": [
+        "run_kind"
+      ]
+    },
+    "SnapshotAndContextData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "cognitive_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "attestation_context": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024,
+          "x-ciris-min-level": "generic"
+        },
+        "attestation_level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "attestation_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "disclosure_severity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "binary_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "env_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "registry_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "file_integrity_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "audit_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "play_integrity_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "hardware_backed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "memory_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "context_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "active_services": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "context_sources": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "service_health": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "x-ciris-min-level": "detailed"
+          },
+          "maxProperties": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "agent_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "circuit_breaker_status": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxProperties": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "key_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "key_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
+        },
+        "ed25519_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
+        },
+        "key_storage_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "hardware_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "verify_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "system_snapshot": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "gathered_context": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "relevant_memories": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "conversation_history": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "ThoughtStartData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "round_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "thought_depth": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "task_priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "updated_info_available": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "requires_human_input": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "thought_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "thought_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "parent_thought_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
+        },
+        "channel_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128,
+          "x-ciris-min-level": "detailed"
+        },
+        "source_adapter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "detailed"
+        },
+        "task_description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "initial_context": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "thought_content": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "TsaspdmaResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "original_tool_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "generic"
+        },
+        "final_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "final_tool_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128,
+          "x-ciris-min-level": "generic"
+        },
+        "gotchas_acknowledged": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "x-ciris-min-level": "detailed"
+          },
+          "maxItems": 32,
+          "x-ciris-min-level": "detailed"
+        },
+        "tool_description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "x-ciris-min-level": "detailed"
+        },
+        "original_parameters": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "final_parameters": {
+          "x-ciris-min-level": "full_traces"
+        },
+        "aspdma_rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "tsaspdma_rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "tsaspdma_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
+    },
+    "VerbSecondPassResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verb": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "original_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "final_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "x-ciris-min-level": "generic"
+        },
+        "verb_specific_data": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rights_basis": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64,
+                "x-ciris-min-level": "generic"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "generic"
+            },
+            "primary_need_category": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64,
+              "x-ciris-min-level": "generic"
+            },
+            "secondary_need_categories": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64,
+                "x-ciris-min-level": "generic"
+              },
+              "maxItems": 32,
+              "x-ciris-min-level": "generic"
+            },
+            "domain_hint": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64,
+              "x-ciris-min-level": "generic"
+            },
+            "operational_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64,
+              "x-ciris-min-level": "generic"
+            },
+            "defer_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500,
+              "x-ciris-min-level": "detailed"
+            },
+            "defer_until": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time",
+              "x-ciris-min-level": "detailed"
+            },
+            "original_tool_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 128,
+              "x-ciris-min-level": "generic"
+            },
+            "final_tool_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 128,
+              "x-ciris-min-level": "generic"
+            },
+            "original_parameters": {
+              "x-ciris-min-level": "full_traces"
+            },
+            "final_parameters": {
+              "x-ciris-min-level": "full_traces"
+            },
+            "original_node_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 128,
+              "x-ciris-min-level": "detailed"
+            },
+            "final_node_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 128,
+              "x-ciris-min-level": "detailed"
+            },
+            "node_id_corrected": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            },
+            "refused_without_wa_approval": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "x-ciris-min-level": "generic"
+            }
+          },
+          "x-ciris-min-level": "generic"
+        },
+        "refused_without_wa_approval": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-ciris-min-level": "generic"
+        },
+        "original_reasoning": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "final_reasoning": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "second_pass_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "second_pass_system_prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536,
+          "x-ciris-min-level": "full_traces"
+        },
+        "egress_alterations": {
+          "$ref": "#/definitions/EgressAlterations",
+          "x-ciris-min-level": "generic"
+        },
+        "run_kind": {
+          "$ref": "#/definitions/RunKind",
+          "x-ciris-min-level": "generic"
+        }
+      },
+      "required": [
+        "run_kind"
+      ]
     }
   }
 }

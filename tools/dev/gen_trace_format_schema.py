@@ -56,22 +56,50 @@ def build() -> dict:
         "type": "string",
         "description": "sha256(signer pubkey)[:16], denormalized from the envelope; MUST equal the trace's",
     }
-    llm = e.json_schema_for(e.EVENT_SCHEMAS["LLM_CALL"])
-    cm = llm["properties"].pop("context_manifest")
-    cm_def = {k: v for k, v in cm.items() if k not in ("type", "x-ciris-min-level")}
-    cm_def["type"] = "object"
-    d["definitions"]["ContextManifest"] = cm_def
-    llm["properties"]["context_manifest"] = {"$ref": "#/definitions/ContextManifest", "x-ciris-min-level": "detailed"}
+    # Every event's data definition is generated from the enforced egress schema (closed: additionalProperties
+    # false), so each carries run_kind and egress_alterations and nothing egress would not ship. The 2.7.0
+    # hand-written definitions are replaced, not kept beside them.
+    for stale in [k for k in d["definitions"] if k.endswith("Data") or k.endswith("Result")]:
+        del d["definitions"][stale]
+    run_kind_ref = {"$ref": "#/definitions/RunKind", "x-ciris-min-level": "generic"}
     d["definitions"]["RunKind"] = {
         "type": "string",
         "enum": list(e.RUN_KIND_VALUES),
         "description": "CC 3.1.5 run_kind, in every component's signed data; mock is refused at federation admission",
     }
-    llm["properties"]["run_kind"] = {"$ref": "#/definitions/RunKind", "x-ciris-min-level": "generic"}
-    d["definitions"]["LlmCallData"] = llm
     d["definitions"]["EgressAlterations"] = e.json_schema_for({"egress_alterations": e.ALTERATIONS_SPEC})["properties"][
         "egress_alterations"
     ]
+    branches = []
+    for event_type in sorted(e.EVENT_SCHEMAS):
+        name = "".join(part.capitalize() for part in event_type.split("_")) + "Data"
+        data = e.json_schema_for(e.EVENT_SCHEMAS[event_type])
+        if "context_manifest" in data["properties"]:
+            cm = data["properties"].pop("context_manifest")
+            cm_def = {k: v for k, v in cm.items() if k not in ("type", "x-ciris-min-level")}
+            cm_def["type"] = "object"
+            d["definitions"]["ContextManifest"] = cm_def
+            data["properties"]["context_manifest"] = {
+                "$ref": "#/definitions/ContextManifest",
+                "x-ciris-min-level": "detailed",
+            }
+        data["properties"]["run_kind"] = run_kind_ref
+        data["properties"]["egress_alterations"] = {
+            "$ref": "#/definitions/EgressAlterations",
+            "x-ciris-min-level": "generic",
+        }
+        data["required"] = ["run_kind"]
+        d["definitions"][name] = data
+        branches.append(
+            {
+                "if": {"properties": {"event_type": {"const": event_type}}, "required": ["event_type"]},
+                "then": {"properties": {"data": {"$ref": f"#/definitions/{name}"}}},
+            }
+        )
+    d["definitions"]["TraceComponent"]["allOf"] = branches
+    d["definitions"]["TraceComponent"]["properties"]["data"]["description"] = (
+        "Component data, by event_type (the <Event>Data definitions); signed (FSD §8)"
+    )
     return d
 
 

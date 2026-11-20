@@ -234,6 +234,11 @@ class FailureStreak:
     last_error_message: str = ""
 
 
+from ciris_adapters.ciris_accord_metrics.context_manifest import (
+    CONTEXT_MANIFEST_FIELD,
+    SubjectPseudonymizer,
+    trace_context_manifest,
+)
 from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
 from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
 from ciris_engine.logic.utils.round_timing import RoundPhase, record_round_phase
@@ -661,6 +666,16 @@ class AccordMetricsService:
 
         # Agent ID for anonymization (set during start)
         self._agent_id_hash: Optional[str] = None
+        # A trace is captured only under the key-derived agent_id_hash (FSD/TRACE_WIRE_FORMAT.md §3.1): without the
+        # signing engine the fallback would be a hash of a guessable name, or "unknown", shared by every such agent.
+        # Tests that need the fallback say so in config; nothing else opts in.
+        self._allow_unkeyed_agent_id = bool(self._config.get("allow_unkeyed_agent_id", False))
+        self._key_derived_hash: Optional[str] = None
+        self._events_refused_unkeyed = 0
+        # The production half of the signed run_kind (prod-managed / prod-personal), resolved once (_run_kind).
+        self._production_run_kind: Optional[str] = None
+        # Per-agent keyed pseudonyms for verified sender ids in LLM_CALL context manifests (context_manifest.py).
+        self._subject_pseudonymizer = SubjectPseudonymizer()
         # Agent name (human-readable identifier for traces at all levels)
         self._agent_name: Optional[str] = str(self._config.get("agent_name", "") or "")
 
@@ -722,6 +737,31 @@ class AccordMetricsService:
         kind = trace_run_kind()
         return None if kind == TraceRunKind.PRODUCTION else kind.value
 
+    def _run_kind(self) -> str:
+        """CC 3.1.5's signed ``run_kind``: production | prod-personal | prod-managed | qa | battery | mock.
+
+        A harness kind (``qa`` / ``battery``) or ``mock`` always wins (``_run_kind_marker``). Otherwise the run is
+        production, split by deployment: ``CIRIS_DEPLOYMENT_KIND=managed|personal`` when the operator sets it, else
+        ``prod-managed`` under CIRIS Manager (``is_managed``) and ``prod-personal`` elsewhere (user ruling
+        2026-10-14: managed vs personal is two more run kinds; the Manager sets managed, the operator can override).
+        ``deployment_type`` keeps its own value; this member does not replace it.
+        """
+        marker = self._run_kind_marker()
+        if marker:
+            return marker
+        if self._production_run_kind is None:
+            override = os.environ.get("CIRIS_DEPLOYMENT_KIND", "").strip().lower()
+            if override in ("managed", "personal"):
+                self._production_run_kind = f"prod-{override}"
+            else:
+                try:
+                    from ciris_engine.logic.utils.path_resolution import is_managed
+
+                    self._production_run_kind = "prod-managed" if is_managed() else "prod-personal"
+                except Exception:  # noqa: BLE001 - "production" is conformant when the split is unknown
+                    self._production_run_kind = "production"
+        return self._production_run_kind
+
     def _effective_deployment_type(self) -> str:
         """The ``deployment_type`` stamped on sealed traces (deployment_profile).
 
@@ -755,21 +795,51 @@ class AccordMetricsService:
             or hash of fallback_id if provided and no engine,
             or "unknown" if neither available.
         """
+        derived = self._key_derived_instance_hash()
+        if derived is not None:
+            return derived
+
+        # Fallback for tests/environments without a wired engine. Never a capture identity: see _capture_agent_id_hash.
+        if fallback_id:
+            return hashlib.sha256(fallback_id.encode()).hexdigest()[:16]
+
+        return "unknown"
+
+    def _key_derived_instance_hash(self) -> Optional[str]:
+        """sha256(signer pubkey)[:16] from the persist Engine, cached once read; None without an engine."""
+        if self._key_derived_hash is not None:
+            return self._key_derived_hash
         try:
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
             engine = get_persist_engine()
             if engine is not None:
                 pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
-                return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+                self._key_derived_hash = hashlib.sha256(pubkey_bytes).hexdigest()[:16]
         except Exception as e:
             logger.debug(f"Could not compute instance hash from engine signer: {e}")
+        return self._key_derived_hash
 
-        # Fallback for tests/environments without a wired engine
-        if fallback_id:
-            return hashlib.sha256(fallback_id.encode()).hexdigest()[:16]
+    def _capture_agent_id_hash(self) -> Optional[str]:
+        """The agent_id_hash a captured component carries, or None: refuse the capture (fail closed).
 
-        return "unknown"
+        Only the key-derived hash names the agent on the wire. Without it the fallback is a hash of the agent's
+        name, or "unknown", which many agents share and anyone can recompute, so the component is not captured:
+        counted, and logged on the first refusal and then every SKIP_LOG_EVERY-th. ``allow_unkeyed_agent_id`` in
+        config (tests only) keeps the old fallback.
+        """
+        derived = self._key_derived_instance_hash()
+        if derived is not None:
+            return derived
+        if self._allow_unkeyed_agent_id:
+            return self._agent_id_hash or self._compute_instance_hash()
+        self._events_refused_unkeyed += 1
+        if self._events_refused_unkeyed == 1 or self._events_refused_unkeyed % SKIP_LOG_EVERY == 0:
+            logger.warning(
+                f"[TRACE] refused {self._events_refused_unkeyed} event(s): no signing engine, so no key-derived "
+                f"agent_id_hash; a trace is never captured under a name-derived or 'unknown' id"
+            )
+        return None
 
     def _anonymize_agent_id(self, agent_id: str) -> str:
         """Hash agent ID for privacy - prefers signing key, falls back to agent_id.
@@ -1433,13 +1503,15 @@ class AccordMetricsService:
             logger.warning(f" Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
 
-    def _build_component(self, event_type: str, thought_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_component(
+        self, event_type: str, thought_id: str, event: Dict[str, Any], agent_id_hash: str
+    ) -> Dict[str, Any]:
         """The `capture_event` component for one reasoning event (worker thread)."""
         return {
             "event_type": event_type,
             "thought_id": thought_id,
             "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
-            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
+            "agent_id_hash": agent_id_hash,
             "task_id": event.get("task_id"),
             "trace_level": self._trace_level.value,
             # #986: the #983 conscience-guidance mode must be auditable FROM THE
@@ -1450,7 +1522,7 @@ class AccordMetricsService:
             # event in every batch and every CEG seal therefore carries which
             # side of the CC 3.4.5 line the process ran on.
             "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
-            "data": self._enforce_egress_schema(event_type, self._extract_component_data(event_type, event)),
+            "data": self._signed_data(event_type, self._extract_component_data(event_type, event)),
         }
 
     def _build_and_capture(self, event_type: str, thought_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -1458,7 +1530,10 @@ class AccordMetricsService:
         lens = self._lens
         if lens is None:  # stopped between the check on the loop and this thread
             return {"outcome": "dropped"}
-        outcome: Dict[str, Any] = lens.capture_event(self._build_component(event_type, thought_id, event))
+        agent_id_hash = self._capture_agent_id_hash()
+        if agent_id_hash is None:
+            return {"outcome": "dropped"}
+        outcome: Dict[str, Any] = lens.capture_event(self._build_component(event_type, thought_id, event, agent_id_hash))
         return outcome
 
     def _skip_capture_without_consent(self, event_type: str, thought_id: str) -> None:
@@ -1697,6 +1772,16 @@ class AccordMetricsService:
         if is_mock_llm_active():
             logger.info("[MOCK-GUARD] mock LLM latched after LensClient build; rebuilding as local-only")
             self._lens = self._build_lens_client()
+
+    def _signed_data(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """A component's ``data`` as it is signed: egress-filtered, then ``run_kind`` (CC 3.1.5).
+
+        ``run_kind`` goes in ``data`` because ``data`` is what the seal signs (FSD/TRACE_WIRE_FORMAT.md §8); a
+        top-level component field may not be.
+        """
+        signed = self._enforce_egress_schema(event_type, data)
+        signed["run_kind"] = self._run_kind()
+        return signed
 
     def _enforce_egress_schema(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Filter a built component to its level's egress schema, before signing.
@@ -2344,6 +2429,16 @@ class AccordMetricsService:
             # DETAILED: add prompt hash for dedup analysis without leaking content
             if is_detailed:
                 data["prompt_hash"] = event.get("prompt_hash")
+                # The call's context manifest (§5.10, context_manifest.py): which typed segments it carried. In
+                # `data`, so the trace signature covers it. Sender ids are per-agent pseudonyms below FULL.
+                context_manifest = trace_context_manifest(
+                    event.get(CONTEXT_MANIFEST_FIELD),
+                    detailed=is_detailed,
+                    full=is_full,
+                    pseudonymizer=self._subject_pseudonymizer,
+                )
+                if context_manifest is not None:
+                    data[CONTEXT_MANIFEST_FIELD] = context_manifest
             # FULL: full prompt + completion text
             if is_full:
                 data["prompt"] = event.get("prompt")
@@ -2405,14 +2500,17 @@ class AccordMetricsService:
         if is_detailed and request.reason:
             data["reason"] = request.reason[:500]
 
+        agent_id_hash = self._capture_agent_id_hash()
+        if agent_id_hash is None:
+            return deferral_id
         component: Dict[str, Any] = {
             "event_type": "DEFERRAL_ROUTED",
             "thought_id": request.thought_id,
             "timestamp": timestamp,
-            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
+            "agent_id_hash": agent_id_hash,
             "task_id": request.task_id,
             "trace_level": self._trace_level.value,
-            "data": self._enforce_egress_schema("DEFERRAL_ROUTED", data),
+            "data": self._signed_data("DEFERRAL_ROUTED", data),
         }
         try:
             async with self._capture_lock:
@@ -2680,6 +2778,7 @@ class AccordMetricsService:
             "traces_completed": self._traces_completed,
             "traces_signed": self._traces_signed,
             "traces_consent_blocked": self._traces_consent_blocked,
+            "events_refused_unkeyed_agent": self._events_refused_unkeyed,
             "events_skipped_no_consent": self._events_skipped_no_consent,
             "traces_mock_refused": self._traces_mock_refused,
             "signer_key_id": signer_key_id,

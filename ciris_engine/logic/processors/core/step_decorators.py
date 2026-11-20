@@ -68,6 +68,16 @@ _paused_thoughts: Dict[str, asyncio.Event] = {}
 _single_step_mode = False
 
 
+
+def _action_name(action: Any) -> str:
+    """An action as the trace wire names it: the enum's value (``speak``), never ``str(enum)``.
+
+    ``str(HandlerActionType.SPEAK)`` is ``"HandlerActionType.SPEAK"``; that spelling reached the signed
+    ASPDMA_RESULT / CONSCIENCE_RESULT events (FSD/TRACE_WIRE_FORMAT.md §5.5, §5.8 name ``speak``).
+    """
+    value = getattr(action, "value", action)
+    return value if isinstance(value, str) else str(value)
+
 def _base_data_dict(base_data: BaseStepData) -> JSONDict:
     """Convert BaseStepData to dict for **unpacking into step data constructors."""
     return {
@@ -498,7 +508,7 @@ def _create_perform_aspdma_data(base_data: BaseStepData, result: Any, args: Tupl
 
     return PerformASPDMAStepData(
         **_base_data_dict(base_data),
-        selected_action=str(result.selected_action),
+        selected_action=_action_name(result.selected_action),
         action_rationale=action_rationale,
         dma_results=dma_results_str,  # String summary for display
         dma_results_obj=dma_results_obj,  # Concrete InitialDMAResults object for event creation
@@ -533,7 +543,7 @@ def _validate_conscience_execution_result(result: Any) -> None:
 
 def _extract_conscience_execution_values(result: Any) -> tuple[str, bool, str, str | None]:
     """Extract core values from conscience execution result."""
-    selected_action = str(result.final_action.selected_action)
+    selected_action = _action_name(result.final_action.selected_action)
     conscience_passed = not result.overridden
     action_result = str(result.final_action)
     override_reason = str(result.override_reason) if result.overridden else None
@@ -593,7 +603,7 @@ def _create_conscience_execution_data(
     # defer) as the model's selection, beside the model's own rationale and
     # prompt. The final action is still reported: in `action_result` here and
     # in the CONSCIENCE_RESULT event.
-    selected_action = str(input_action_result.selected_action)
+    selected_action = _action_name(input_action_result.selected_action)
 
     # Extract ASPDMA prompt if available (set by evaluator in user_prompt field)
     aspdma_prompt = getattr(input_action_result, "user_prompt", None)
@@ -763,7 +773,7 @@ def _create_recursive_aspdma_data(
         )
 
     return RecursiveASPDMAStepData(
-        **_base_data_dict(base_data), retry_reason=str(args[0]), original_action=str(result.selected_action)
+        **_base_data_dict(base_data), retry_reason=str(args[0]), original_action=_action_name(result.selected_action)
     )
 
 
@@ -778,7 +788,7 @@ def _create_recursive_conscience_data(base_data: BaseStepData, result: Any) -> R
         )
 
     return RecursiveConscienceStepData(
-        **_base_data_dict(base_data), retry_action=str(result.selected_action), retry_result=str(result)
+        **_base_data_dict(base_data), retry_action=_action_name(result.selected_action), retry_result=str(result)
     )
 
 
@@ -867,7 +877,7 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
 
     return FinalizeActionStepData(
         **_base_data_dict(base_data),
-        selected_action=str(final_action.selected_action),
+        selected_action=_action_name(final_action.selected_action),
         conscience_passed=not result.overridden,
         conscience_override_reason=result.override_reason if result.overridden else None,
         epistemic_data=result.epistemic_data,
@@ -911,9 +921,9 @@ def _create_perform_action_data(
     """Create PERFORM_ACTION specific typed data."""
     # Extract selected_action - first try result, then args
     if result and hasattr(result, "selected_action"):
-        selected_action = str(result.selected_action)
+        selected_action = _action_name(result.selected_action)
     elif args:
-        selected_action = str(args[0])
+        selected_action = _action_name(args[0])
     else:
         raise ValueError(
             "PERFORM_ACTION cannot determine selected_action - neither result.selected_action nor args[0] available"

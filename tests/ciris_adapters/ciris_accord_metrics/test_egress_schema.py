@@ -91,34 +91,55 @@ def test_a_valid_event_passes_unchanged(level: TraceLevel, event_type: str) -> N
 class TestEachViolationKind:
     def test_unexpected_field_is_dropped(self) -> None:
         result = enforce_egress_schema("ACTION_RESULT", TraceLevel.GENERIC, {"tokens_total": 3, "user_message": "hi"})
-        assert result.data == {"tokens_total": 3}
+        # Not in the schema: dropped, and the signed data says so (path and kind, never a hash of the content).
+        assert result.data == {
+            "tokens_total": 3,
+            "egress_alterations": [{"path": "user_message", "kind": "dropped_not_in_schema", "original_length": 2}],
+        }
         assert [(v.path, v.kind) for v in result.violations] == [("user_message", ViolationKind.UNEXPECTED_FIELD)]
 
     def test_field_above_its_level_is_dropped(self) -> None:
         result = enforce_egress_schema(
             "LLM_CALL", TraceLevel.GENERIC, {"model": "m", "base_url": "https://x.example/v1"}
         )
-        assert result.data == {"model": "m"}
+        assert result.data == {"model": "m"}  # above the level: the level mechanism, no alteration mark
         assert result.violations[0].path == "base_url"
         assert "allowed from detailed" in result.violations[0].detail
 
     def test_letters_where_a_number_belongs(self) -> None:
         result = enforce_egress_schema("ACTION_RESULT", TraceLevel.GENERIC, {"tokens_total": "forty-two"})
-        assert result.data == {}
+        assert result.data == {
+            "egress_alterations": [{"path": "tokens_total", "kind": "dropped_wrong_type", "original_length": 9}]
+        }
         assert result.violations[0].kind == ViolationKind.WRONG_TYPE
 
     def test_free_text_where_a_token_belongs(self) -> None:
         result = enforce_egress_schema("ASPDMA_RESULT", TraceLevel.GENERIC, {"selected_action": "speak to María now"})
-        assert result.data == {}
+        assert list(result.data) == ["egress_alterations"]
+        assert "sha256" not in result.data["egress_alterations"][0]  # type: ignore[index]  # no hash of misplaced content
+        assert "María" not in repr(result.data)
         assert result.violations[0].kind == ViolationKind.WRONG_TYPE
 
     def test_bool_is_not_a_number(self) -> None:
         result = enforce_egress_schema("ACTION_RESULT", TraceLevel.GENERIC, {"execution_time_ms": True})
-        assert result.data == {}
+        assert result.data == {"egress_alterations": [{"path": "execution_time_ms", "kind": "dropped_wrong_type"}]}
 
     def test_over_long_text_is_capped(self) -> None:
+        import hashlib
+
         result = enforce_egress_schema("DEFERRAL_ROUTED", TraceLevel.DETAILED, {"reason": "x" * 2000})
-        assert result.data == {"reason": "x" * REASON_MAX_CHARS}
+        # Cut, and the signed data records the cut: what the original was, so nothing is lost silently.
+        assert result.data == {
+            "reason": "x" * REASON_MAX_CHARS,
+            "egress_alterations": [
+                {
+                    "path": "reason",
+                    "kind": "truncated",
+                    "original_length": 2000,
+                    "sha256": hashlib.sha256(b"x" * 2000).hexdigest(),
+                }
+            ],
+        }
         assert result.violations[0].kind == ViolationKind.OVER_CAP
 
     def test_over_long_list_is_cut_and_bad_items_dropped(self) -> None:
@@ -134,7 +155,8 @@ class TestEachViolationKind:
         result = enforce_egress_schema(
             "LLM_CALL", TraceLevel.DETAILED, {"base_url": "https://user:key@10.0.0.5:11434/v1?api_key=s"}
         )
-        assert result.data == {}
+        assert list(result.data) == ["egress_alterations"]
+        assert "key@" not in repr(result.data)
 
 
 class TestVerbSpecificData:
@@ -235,7 +257,7 @@ class _FakeLens:
 @pytest.mark.asyncio
 async def test_the_service_filters_before_the_substrate_sees_it(caplog: pytest.LogCaptureFixture) -> None:
     """End to end through _process_single_event: the signer never receives the reason."""
-    service = AccordMetricsService(config={"trace_level": "generic"})
+    service = AccordMetricsService(config={"trace_level": "generic", "allow_unkeyed_agent_id": True})
     lens = _FakeLens()
     service._lens = lens
     event = {
@@ -272,3 +294,18 @@ def test_full_json_object_keys_are_capped_and_counted(caplog: pytest.LogCaptureF
     with caplog.at_level(logging.WARNING, logger=egress_schema.__name__):
         reporter.report(result.violations)
     assert long_key[:200] not in caplog.text
+
+
+
+def test_a_producer_cannot_forge_alteration_marks() -> None:
+    result = enforce_egress_schema(
+        "ACTION_RESULT", TraceLevel.GENERIC, {"tokens_total": 3, "egress_alterations": [{"path": "x", "kind": "none"}]}
+    )
+    assert result.data == {"tokens_total": 3}
+
+
+def test_marks_are_capped_with_a_count_of_the_rest() -> None:
+    data = {f"bogus_{i}": "v" for i in range(egress_schema.ALTERATIONS_MAX + 5)}
+    marks = enforce_egress_schema("ACTION_RESULT", TraceLevel.GENERIC, data).data["egress_alterations"]
+    assert len(marks) == egress_schema.ALTERATIONS_MAX + 1  # type: ignore[arg-type]
+    assert marks[-1] == {"path": "*", "kind": "more", "original_length": 5}  # type: ignore[index]

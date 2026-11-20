@@ -40,6 +40,7 @@ def _service(consent: bool) -> AccordMetricsService:
         config["consent_timestamp"] = "2026-01-01T00:00:00Z"
     svc = AccordMetricsService(config=config)
     svc._agent_id_hash = "testhash0000000"
+    svc._allow_unkeyed_agent_id = True  # no signing engine here: opt in to the test-only fallback
     return svc
 
 

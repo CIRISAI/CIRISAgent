@@ -158,6 +158,8 @@ apps/ios/Resources.zip
 */.gradle/
 **/.gradle/
 agent_signing.key
+# Per-agent pseudonym key for trace sender ids (ciris_accord_metrics/context_manifest.py)
+trace_subject_hmac.key
 ciris_engine/desktop_app/*.jar
 ciris_engine/desktop_app/jre/
 ciris_engine/desktop_app/JRE_RELEASE.txt

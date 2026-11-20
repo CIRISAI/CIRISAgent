@@ -261,7 +261,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             split_template,
             stripped_ends,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         current_params = aspdma_result.action_parameters
@@ -273,7 +273,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         builder.single("system", segment("accord", SegmentKind.ACCORD, get_localized_accord_text(language) or ""))
         # Per-language guidance — empty for most languages, populated for locales where systematic terminology
         # gaps were observed (am as of 2.7.6).
-        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or "", locale=language_guidance_locale(language)))
         # Crisis resources ride directly after language guidance (#1248).
         builder.single(
             "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
@@ -281,9 +281,9 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         # The pipeline position is its own segment, from its own template field (#1366 item 12).
         guide = [
             (
-                pipeline_position_segment(text)
+                pipeline_position_segment(text, locale=self._pipeline_position_locale())
                 if key == "pipeline_position"
-                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text)
+                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text, locale=self.served_locale)
             )
             for key, text in [
                 ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
@@ -351,7 +351,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             else:
                 plain[slot] = absent
         user, user_items = split_template(
-            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain
+            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain, locale=self.served_locale
         )
         sender = verified_sender_of(original_thought, context)
         if sender is not None:

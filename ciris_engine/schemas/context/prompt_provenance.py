@@ -227,6 +227,17 @@ class SizeBucket(str, Enum):
     LONG = "long"
 
 
+class LocaleBasis(str, Enum):
+    """How a segment record knows the locale its bytes were rendered in."""
+
+    DECLARED = "declared"  # the producer stated the locale it served (e.g. the prompt loader's resolved file)
+    ASSEMBLER_RENDERED = "assembler_rendered"  # the assembler rendered the bytes itself, in the call's language
+    UNSTATED = "unstated"  # nobody stated it (user text, model output, a template whose locale is unknown)
+
+
+LOCALE_PATTERN = r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+
+
 class StubFacts(BaseModel):
     """What the ENGINE knows about a segment that a stub reports and the segment itself cannot say.
 
@@ -359,6 +370,11 @@ class PromptSegment(BaseModel):
     truncated: bool = Field(False, description="The producer cut the text")
     origin_task_id: Optional[str] = Field(None, description="Task a per-task segment belongs to")
     origin_thought_id: Optional[str] = Field(None, description="Thought a per-thought segment belongs to")
+    locale: Optional[str] = Field(
+        None,
+        pattern=LOCALE_PATTERN,
+        description="Locale the producer rendered these bytes in (the locale actually served, after any fallback)",
+    )
     stub_facts: Optional[StubFacts] = Field(
         None, description="Engine facts a stub reports if the policy withholds this segment (FSD §6a)"
     )
@@ -515,6 +531,8 @@ class SegmentRecord(BaseModel):
     form: SegmentForm = Field(SegmentForm.FULL, description="stub: the span holds the stub line, not the bytes")
     stub: Optional[SegmentStub] = Field(None, description="The stub sent in place of the segment (form stub)")
     withheld_sha256: Optional[str] = Field(None, description="sha256 of the withheld bytes (form stub)")
+    locale: Optional[str] = Field(None, pattern=LOCALE_PATTERN, description="Locale the bytes were rendered in")
+    locale_basis: LocaleBasis = Field(LocaleBasis.UNSTATED, description="How the locale is known")
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -549,6 +567,12 @@ class PromptManifest(BaseModel):
     guard_violations: List[GuardViolation] = Field(default_factory=list)
     segments: List[SegmentRecord] = Field(default_factory=list)
     messages_sha256: str = Field(..., description="sha256 of the assembled messages, as the LLM bus hashes them")
+    language: Optional[str] = Field(None, description="Locale the call was rendered for (as the engine resolved it)")
+    locale_fallbacks: List[str] = Field(
+        default_factory=list,
+        description="Ids of segments whose stated locale differs from the call's language (a locale file missing, "
+        "an English-only template piece). Polyglot text is not a fallback and is not listed",
+    )
     # Filled when the manifest reaches the LLM bus (logic/prompt_assembly/manifest_scope.py)
     sent_messages_match: Optional[bool] = Field(
         None, description="The bus sent exactly the assembled messages (the differential check, FSD §8)"

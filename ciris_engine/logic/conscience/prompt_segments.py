@@ -134,6 +134,7 @@ def assemble_conscience_prompt(
     # the render seam the compose dump records).
     system_prompt = loader.get_system_prompt(conscience_type)
     head, position, tail = loader.get_system_prompt_parts(conscience_type)
+    system_locale, position_locale, user_locale = loader.prompt_locales(conscience_type)
     if "\n\n".join(part for part in (head, position, tail) if part) != system_prompt:
         raise SegmentationError(f"{conscience_type}: system prompt parts do not rejoin to the system prompt")
     instr = [
@@ -144,13 +145,15 @@ def assemble_conscience_prompt(
                 kind=SegmentKind.STAGE_INSTRUCTION,
                 source=SegmentSource.ENGINE,
                 text=head,
+                locale=system_locale,
             ),
-            pipeline_position_segment(position),
+            pipeline_position_segment(position).model_copy(update={"locale": position_locale}),
             PromptSegment(
                 segment_id="instr:system:after_position",
                 kind=SegmentKind.STAGE_INSTRUCTION,
                 source=SegmentSource.ENGINE,
                 text=tail,
+                locale=system_locale,
             ),
         )
         if seg.text
@@ -233,7 +236,7 @@ def assemble_conscience_prompt(
         image = values.pop("image_context", None)
         return loader.get_user_prompt(conscience_type, image_context=image, **values)
 
-    blocks["template"] = split_template(render, slots, prefix="instr:template", plain=plain)
+    blocks["template"] = split_template(render, slots, prefix="instr:template", plain=plain, locale=user_locale)
 
     order = (
         ["sender", "record", "governance", "approval_rule", "withheld", "template"]

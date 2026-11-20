@@ -68,6 +68,7 @@ from ciris_engine.schemas.context.prompt_provenance import (
     GuardViolation,
     GuardViolationKind,
     Lifecycle,
+    LocaleBasis,
     ManifestThoughtKind,
     PolicyFacts,
     PolicyRow,
@@ -86,6 +87,38 @@ from ciris_engine.schemas.services.llm import ImageContentBlock, ImageURLDetail,
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+# Locale codes with no single language (BCP 47): text that is deliberately multilingual, and closed-vocabulary
+# tokens with no linguistic content (a stub line). Neither is a fallback.
+MULTILINGUAL_LOCALE = "mul"
+NO_LANGUAGE_LOCALE = "zxx"
+
+
+def _primary(locale: str) -> str:
+    return locale.split("-", 1)[0].lower()
+
+
+def segment_locale(seg: PromptSegment, language: Optional[str], withheld: bool) -> Tuple[Optional[str], LocaleBasis]:
+    """The locale a segment's bytes were rendered in, and how that is known.
+
+    A stub line is closed-vocabulary tokens (``zxx``). The sender's lines are rendered here from their carriers,
+    in the call's language (the assembler's own labels are English). Otherwise the producer's stated locale, or
+    unstated: user text and model output have no locale the engine can vouch for.
+    """
+    if withheld:
+        return NO_LANGUAGE_LOCALE, LocaleBasis.ASSEMBLER_RENDERED
+    if seg.kind in (SegmentKind.SENDER_IDENTITY, SegmentKind.DISPLAY_NAME):
+        return (language or "en"), LocaleBasis.ASSEMBLER_RENDERED
+    if seg.locale is not None:
+        return seg.locale, LocaleBasis.DECLARED
+    return None, LocaleBasis.UNSTATED
+
+
+def is_locale_fallback(locale: Optional[str], language: Optional[str]) -> bool:
+    """A stated locale that is not the call's language (polyglot and no-language text excepted)."""
+    if locale is None or language is None or locale in (MULTILINGUAL_LOCALE, NO_LANGUAGE_LOCALE):
+        return False
+    return _primary(locale) != _primary(language)
 
 ASSEMBLER_VERSION = "2"
 SEGMENT_SEPARATOR = "\n\n"
@@ -489,6 +522,7 @@ class PromptAssembler:
             index = len(messages)
             for seg, (start, end) in spans:
                 withheld = seg.segment_id in withheld_ids
+                locale, locale_basis = segment_locale(seg, call.language, withheld)
                 records.append(
                     SegmentRecord(
                         segment_id=seg.segment_id,
@@ -509,6 +543,8 @@ class PromptAssembler:
                         form=SegmentForm.STUB if withheld else SegmentForm.FULL,
                         stub=stubs.get(seg.segment_id),
                         withheld_sha256=_sha256(seg.text) if withheld else None,
+                        locale=locale,
+                        locale_basis=locale_basis,
                     )
                 )
             if message_images:
@@ -539,6 +575,12 @@ class PromptAssembler:
             guard_violations=violations,
             segments=records,
             messages_sha256=digest,
+            language=call.language,
+            locale_fallbacks=[
+                r.segment_id
+                for r in records
+                if r.locale_basis == LocaleBasis.DECLARED and is_locale_fallback(r.locale, call.language)
+            ],
         )
         return messages, manifest
 

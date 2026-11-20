@@ -2410,8 +2410,13 @@ class CorrectionEpisodeTests:
         ch = f"api_{self.users['wa']['user_id']}_ctxmap_s3"
         await step("S3r", "wa", OBEY_WA_RULE_TEMPLATE.format(rule=rule), channel_id=ch)
         await step("S3", "wa", f"{probe_text} $veto entropy", channel_id=ch)
-        # S4 the identity-change path: DEFER with the paragraph; the WA approves the exact text; the guidance task
-        reply, deferral = await self._send_and_watch_for_deferral("wa", f"$defer {para}", "ctxmap-S4c")
+        # S4 the identity-change path as it runs live (Eric 2026-11-20): the WA's correction makes the agent draft an
+        # identity MEMORIZE; the engine defers it as a proposal (identity_change: proposed_text + M-1 justification);
+        # the WA approves the proposed text byte for byte (_resolve); the guidance task writes it. M4_CTXMAP_S4=defer
+        # keeps the earlier forced-$defer form, whose deferral carries no proposal.
+        s4_msg = (f"$defer {para}" if os.environ.get("M4_CTXMAP_S4", "").strip() == "defer"
+                  else f"$memorize agent/identity CONCEPT IDENTITY {para}")
+        reply, deferral = await self._send_and_watch_for_deferral("wa", s4_msg, "ctxmap-S4c")
         steps["S4c"] = {"label": "S4c", "task_id": reply.get("task_id"), "deferral": deferral}
         self._log("ctxmap_step", label="S4c", task_id=reply.get("task_id"), deferral_id=(deferral or {}).get("deferral_id"))
         if deferral:

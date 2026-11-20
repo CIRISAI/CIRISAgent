@@ -137,6 +137,7 @@ FACT_SETTLE_MAX_S = 90.0
 IDENTITY_WAIT_S = 480.0
 INTERACT_TIMEOUT_S = 900.0
 POLL_S = 4.0
+BASE_LINK_SETTLE_S = float(os.environ.get("M4_BASE_LINK_SETTLE_S", "30"))
 
 
 #: Bounded retries for calls the agent did not admit (503 SHED / 429) and transient connection errors.
@@ -1163,12 +1164,18 @@ class CorrectionEpisodeTests:
             self._log("base_link", skipped=True, mode=os.environ.get("M4_BASE_LINK"))
             return
         t0 = time.time()
+        approved_at: Optional[float] = None
         profile: Dict[str, Any] = {}
         while time.time() - t0 < wait_s:
             await self._pending_deferrals()
             status, body = await self._req("GET", "/v1/wa/deferrals", self.harness_token, timeout=30)
             profile = ((body.get("data") or {}).get("profile") or {}) if status == 200 else {}
-            if profile.get("status") == "anchored" or (self._base_link_seen and not profile.get("proposed_base_link")):
+            if profile.get("status") == "anchored":
+                break
+            # After approving, give the agent's profile re-check a bounded time to report anchored before going on.
+            if self._base_link_seen and approved_at is None:
+                approved_at = time.time()
+            if approved_at is not None and time.time() - approved_at > BASE_LINK_SETTLE_S:
                 break
             await asyncio.sleep(POLL_S)
         self._log("base_link_profile", profile=profile, waited_s=round(time.time() - t0, 1),

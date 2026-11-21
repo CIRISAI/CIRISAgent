@@ -48,7 +48,7 @@ class TestTimeServiceMetrics(BaseMetricsTest):
         "uptime_requests",
         "total_requests",
         "days_running",
-        "time_drift_ms",
+        "time_drift_measured",
         "ntp_check_count",
         "ntp_failures",
         "timezone_offset",
@@ -89,7 +89,7 @@ class TestTimeServiceMetrics(BaseMetricsTest):
         # Check v1.4.3 metrics - different names
         assert metrics["time_queries_total"] >= 4.0  # now() called 4 times total
         assert metrics["time_sync_operations"] >= 0.0
-        assert metrics["time_drift_ms"] >= 0.0
+        assert metrics["time_drift_measured"] in (0.0, 1.0)
         assert metrics["time_uptime_seconds"] >= 0.0
 
     def test_time_service_ntp_metrics_with_ntplib(self):
@@ -115,22 +115,52 @@ class TestTimeServiceMetrics(BaseMetricsTest):
             assert "ntp_check_count" in metrics
             assert "ntp_failures" in metrics
             assert metrics["time_drift_ms"] == 50.0  # 0.05 seconds = 50ms
+            assert metrics["time_drift_measured"] == 1.0
 
     def test_time_service_ntp_metrics_without_ntplib(self):
         """Test NTP metrics when ntplib is not available."""
         with patch.dict("sys.modules", {"ntplib": None}):
             service = TimeService()
-            # Force NTP check - should fall back to simulation
+            # Force NTP check: no ntplib, so no measurement
             service._update_ntp_offset()
 
             metrics = service._collect_custom_metrics()
 
-            # Should still have drift metrics (simulated)
-            assert "time_drift_ms" in metrics
+            # A missing measurement is reported as absent, never simulated
+            assert "time_drift_ms" not in metrics
+            assert metrics["time_drift_measured"] == 0.0
             assert "ntp_check_count" in metrics
             assert "ntp_failures" in metrics
-            # Simulated drift should be based on uptime
-            assert metrics["time_drift_ms"] >= 0.0
+            assert service.get_ntp_offset() is None
+
+    def test_a_failed_ntp_check_keeps_the_last_real_measurement(self):
+        mock_ntplib = MagicMock()
+        mock_client = MagicMock()
+        mock_client.request.return_value = MagicMock(offset=0.05)
+        mock_ntplib.NTPClient.return_value = mock_client
+        with patch.dict("sys.modules", {"ntplib": mock_ntplib}):
+            service = TimeService()
+            service._update_ntp_offset()
+            mock_client.request.side_effect = OSError("unreachable")
+            service._update_ntp_offset()
+            metrics = service._collect_custom_metrics()
+        assert metrics["time_drift_ms"] == 50.0, "the last real measurement, not a simulated one"
+
+    def test_adjusted_time_adds_the_offset(self):
+        """ntplib's offset is server - local: positive means the local clock is BEHIND, so adjusted = now + offset."""
+        from datetime import timedelta
+
+        mock_ntplib = MagicMock()
+        mock_client = MagicMock()
+        mock_client.request.return_value = MagicMock(offset=2.0)
+        mock_ntplib.NTPClient.return_value = mock_client
+        with patch.dict("sys.modules", {"ntplib": mock_ntplib}):
+            service = TimeService()
+            service._update_ntp_offset()
+            service._check_ntp_drift_if_needed = lambda: None  # type: ignore[method-assign]
+            fixed = service.now()
+            service.now = lambda: fixed  # type: ignore[method-assign]
+            assert service.get_adjusted_time() == fixed + timedelta(seconds=2.0)
 
 
 class TestShutdownServiceMetrics(BaseMetricsTest):

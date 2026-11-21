@@ -46,7 +46,7 @@ BaseInfrastructureService
 2. **NTP Drift Monitoring**
    - Hourly checks against NTP pools
    - Drift measurement in milliseconds
-   - Fallback to simulated drift when NTP unavailable
+   - No measurement when NTP is unavailable: drift is reported as absent, never simulated
 
 3. **Metrics Collection**
    - Request counting by operation type
@@ -118,12 +118,12 @@ _ntp_pools = [
 _ntp_check_interval = 3600  # seconds
 ```
 
-### Drift Simulation
+### When NTP is unavailable
 
-When NTP is unavailable, the service simulates realistic drift:
-- Typical quartz crystal drift: 20-100 ppm
-- Approximately 1.7-8.6 seconds per day
-- Simulation uses 50 ppm (4.3 seconds/day)
+Nothing is simulated. Until an NTP server has answered, `get_ntp_offset()` returns `None`, the metrics carry
+`time_drift_measured: 0.0` and no `time_drift_ms`, and `get_adjusted_time()` returns `now()`. A failed later
+check keeps the last real measurement. The offset follows ntplib: server minus local, so a positive offset means
+the local clock is behind, and the adjusted time is `now() + offset`.
 
 ### Metrics Tracked
 
@@ -136,7 +136,8 @@ When NTP is unavailable, the service simulates realistic drift:
 
 #### Advanced Metrics
 - `days_running` - Uptime in days
-- `time_drift_ms` - NTP offset in milliseconds
+- `time_drift_measured` - 1.0 once NTP has measured the offset, else 0.0
+- `time_drift_ms` - measured NTP offset in milliseconds (server - local); present only when measured
 - `ntp_check_count` - Successful NTP checks
 - `ntp_failures` - Failed NTP attempts
 - `timezone_offset` - Always 0.0 for UTC
@@ -144,7 +145,7 @@ When NTP is unavailable, the service simulates realistic drift:
 #### v1.4.3 Compatibility Metrics
 - `time_queries_total` - Total time queries
 - `time_sync_operations` - NTP synchronization operations
-- `time_drift_ms` - Current drift measurement
+- `time_drift_measured` / `time_drift_ms` - as above (no simulated value)
 - `time_uptime_seconds` - Service uptime
 
 ## Usage Patterns

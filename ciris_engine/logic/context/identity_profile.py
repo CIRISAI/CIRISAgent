@@ -490,6 +490,35 @@ def set_base_link_opener(opener: Optional[BaseLinkOpener]) -> None:
     _base_link_opener = opener
 
 
+#: What re-runs the whole-profile check (the runtime's boot check, same load path as the context builders).
+ProfileRefresher = Callable[[], Awaitable[None]]
+_profile_refresher: Optional[ProfileRefresher] = None
+
+
+def set_profile_refresher(refresher: Optional[ProfileRefresher]) -> None:
+    """Register (or clear) what re-checks the profile. The runtime, once its memory service is up."""
+    global _profile_refresher
+    _profile_refresher = refresher
+
+
+async def refresh_identity_profile() -> bool:
+    """Re-check the profile now; True when a refresher ran. Never raises.
+
+    Called when a base link is recorded, so the profile reads anchored at once (the deferral list, the client's
+    approve gate) instead of on the next identity load (RATCHET run 44854632378: still "unanchored" 30 s after
+    the base link was recorded).
+    """
+    refresher = _profile_refresher
+    if refresher is None:
+        return False
+    try:
+        await refresher()
+    except Exception as exc:  # noqa: BLE001 - the next identity load re-checks
+        logger.warning(f"identity profile: re-check after a base link failed ({type(exc).__name__})")
+        return False
+    return True
+
+
 def _template_manifest_version(manifest_dirs: Optional[Sequence[Path]] = None) -> Optional[str]:
     for directory in manifest_dirs or MANIFEST_DIRS:
         manifest = directory / TEMPLATE_MANIFEST_FILE

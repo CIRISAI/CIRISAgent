@@ -65,9 +65,11 @@ class PrevNode(FakeNode):
 def _clean_profile_state() -> Any:
     ip.reset_base_link_state()
     ip.set_base_link_opener(None)
+    ip.set_profile_refresher(None)
     yield
     ip.reset_base_link_state()
     ip.set_base_link_opener(None)
+    ip.set_profile_refresher(None)
 
 
 def _profile(status: IdentityProfileStatus, template: Optional[str] = "default") -> IdentityProfile:
@@ -208,6 +210,54 @@ async def test_an_approved_base_link_is_written_with_no_prev(
     amendment = amendment_from_node(base)
     assert amendment is not None and amendment.base and amendment.approved_sha256 == DIGEST
     assert amendment.amendment_attestation_id == stored["base_link"]["amendment_attestation_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_recorded_base_link_re_checks_the_profile_at_once(
+    wise_authority_service: Any, auth_service: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Anchored at once, not on the next identity load (RATCHET run 44854632378: unanchored 30 s after)."""
+    node = install_fake_node(monkeypatch, PrevNode())
+    deferral_id, _pending, response = await _open_and_answer(wise_authority_service, node, auth_service)
+    refreshed: List[str] = []
+
+    async def _refresh() -> None:
+        refreshed.append("checked")
+
+    ip.set_profile_refresher(_refresh)
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    assert refreshed == ["checked"]
+
+
+@pytest.mark.asyncio
+async def test_a_base_link_not_recorded_does_not_re_check(
+    wise_authority_service: Any, auth_service: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = install_fake_node(monkeypatch, FakeNode(chain=False))
+    deferral_id, _pending, response = await _open_and_answer(wise_authority_service, node, auth_service)
+    refreshed: List[str] = []
+
+    async def _refresh() -> None:
+        refreshed.append("checked")
+
+    ip.set_profile_refresher(_refresh)
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    assert refreshed == []
+
+
+@pytest.mark.asyncio
+async def test_a_failing_re_check_never_breaks_the_resolve(
+    wise_authority_service: Any, auth_service: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = install_fake_node(monkeypatch, PrevNode())
+    deferral_id, pending, response = await _open_and_answer(wise_authority_service, node, auth_service)
+
+    async def _boom() -> None:
+        raise RuntimeError("memory down")
+
+    ip.set_profile_refresher(_boom)
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    assert _stored_deferral(pending.task_id)["base_link"]["status"] == "recorded"
 
 
 @pytest.mark.asyncio

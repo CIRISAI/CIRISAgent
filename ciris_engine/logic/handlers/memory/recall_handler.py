@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.context.room_audience import visible_nodes
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import build_recalled_node_info, fetch_connected_nodes
 from ciris_engine.schemas.actions import RecallParams
@@ -16,6 +17,13 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, Node
 from ciris_engine.schemas.services.operations import MemoryQuery
 
 logger = logging.getLogger(__name__)
+
+
+def _dispatch_channel_id(dispatch_context: DispatchContext) -> Optional[str]:
+    """The channel this RECALL happens in, or ``None`` (then only nodes naming no room are shown)."""
+    channel = getattr(dispatch_context, "channel_context", None)
+    channel_id = getattr(channel, "channel_id", None)
+    return channel_id if isinstance(channel_id, str) and channel_id else None
 
 
 class RecallHandler(BaseActionHandler):
@@ -45,8 +53,15 @@ class RecallHandler(BaseActionHandler):
         # Perform recall query
         nodes = await self._perform_recall_query(params)
 
+        # Only what this room may see (CC 1.13.3.4): a memory learned in another room, a DM above all, is withheld.
+        channel_id = _dispatch_channel_id(dispatch_context)
+        shown = visible_nodes(nodes, channel_id)
+        if len(shown) != len(nodes):
+            logger.info(f"RECALL in {channel_id!r}: {len(nodes) - len(shown)} node(s) from another room withheld")
+        nodes = shown
+
         # Build result
-        recall_result = await self._build_recall_result(nodes, params)
+        recall_result = await self._build_recall_result(nodes, params, channel_id)
 
         return self.complete_thought_and_create_followup(
             thought=thought, follow_up_content=recall_result.to_follow_up_content(), action_result=result
@@ -108,7 +123,9 @@ class RecallHandler(BaseActionHandler):
 
         return nodes
 
-    async def _build_recall_result(self, nodes: List[GraphNode], params: RecallParams) -> RecallResult:
+    async def _build_recall_result(
+        self, nodes: List[GraphNode], params: RecallParams, channel_id: Optional[str] = None
+    ) -> RecallResult:
         """Build RecallResult with connected nodes."""
         query_desc = self._build_query_description(params)
         success = bool(nodes)
@@ -127,7 +144,7 @@ class RecallHandler(BaseActionHandler):
             node_info = build_recalled_node_info(node)
 
             # Fetch connected nodes
-            connected = await fetch_connected_nodes(node, self.bus_manager, self.__class__.__name__)
+            connected = await fetch_connected_nodes(node, self.bus_manager, self.__class__.__name__, channel_id=channel_id)
             if connected:
                 node_info.connected_nodes = connected
 

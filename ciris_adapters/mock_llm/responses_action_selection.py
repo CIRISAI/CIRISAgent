@@ -89,6 +89,10 @@ def echo_question(request: str) -> str:
     return f'[MOCK LLM ECHO] What is meant by "{request}"?'
 
 
+#: What the mock states as an identity write's ACCORD M-1 (Adaptive Coherence) justification (#1366).
+MOCK_M1_JUSTIFICATION = "[MOCK LLM] M-1: keeps the agent coherent with its Wise Authority's correction."
+
+
 def _memorize_command_id(args: str) -> str:
     """The node id (and so the stored content) a mock "$memorize <args>" proposes."""
     return "_".join(args.split()[:3]).lower().replace(",", "").replace(".", "") or "memory_node"
@@ -1257,6 +1261,10 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 # is what gets stored (S5: the identity paragraph a WA approved).
                 if len(words) > 3:
                     memorize_attributes["statement"] = " ".join(words[3:])
+                if node_scope == GraphScope.IDENTITY:
+                    # An identity write states its M-1 justification, as a live model does (#1366): without it a
+                    # WA-approved proposal is deferred back and the mock can never show an amendment land.
+                    memorize_attributes["m1_justification"] = MOCK_M1_JUSTIFICATION
 
             params = MemorizeParams(
                 node=GraphNode(
@@ -2032,6 +2040,8 @@ def aspdma_llm_result(
         node_attributes = node.get("attributes")
         if isinstance(node_attributes, dict) and node_attributes.get("statement"):
             handed_over["statement"] = str(node_attributes["statement"])
+        if isinstance(node_attributes, dict) and node_attributes.get("m1_justification"):
+            handed_over["m1_justification"] = str(node_attributes["m1_justification"])
         flat_result = ASPDMALLMResult(
             selected_action=action,
             reasoning=_with_mock_params(rationale, handed_over),
@@ -2307,7 +2317,11 @@ def msaspdma_llm_result(
     # wa_identity_approval exercises the shape that broke uptake. Other scopes
     # keep `content`: the memory QA modules find their nodes by it.
     attributes = (
-        {"created_by": "agent", "statement": content}
+        {
+            "created_by": "agent",
+            "statement": content,
+            "m1_justification": str(handed_over.get("m1_justification") or MOCK_M1_JUSTIFICATION),
+        }
         if node_scope.lower() == "identity"
         else {"created_by": "agent", "content": content}
     )

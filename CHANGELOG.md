@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.2-stable] - 2026-11-20
+
+### Changed
+
+- **ciris-server 0.5.252** (edge v45.1.7, persist v61.4.2, verify v22.2.0; wheel hashes checked against PyPI). 0.5.251 gave `emit_identity_amendment` a `prev=`, so an approved amendment names the chain head it follows. 0.5.252 also accepts `prev="template:<template sha256>"`, the derived base of a pre-approved shipped template. No other surface change; no migrations.
+- **A shipped template is pre-approved, so its identity is anchored at first boot with no Wise Authority step** (Eric, 2026-11-20).
+  - When the agent's template matches the accord-holder-signed template manifest (`pre-approved-templates.hybrid.json`), that template is the profile's anchored base. It is derived, not a row, and no base-link deferral opens.
+  - The first approved amendment names it as `prev = "template:<the template's sha256>"`, which needs ciris-server 0.5.252; later amendments chain by row id. The sentinel is the template's own checksum, not the manifest's, so a re-signed manifest doesn't break any chain and only a change to the template's bytes does.
+  - A custom or modified template, or an unsigned manifest, still asks a Wise Authority for its base link. A base row a Wise Authority already approved still takes precedence.
+  - `tools/dev/regen_template_manifest.py --sign-hybrid` is the release step: an accord holder signs the manifest through `ciris-server accord sign-bytes`, as for the accord manifest.
+
+### Fixed
+
+- **What a user says in one room is no longer carried into another** (CC 1.13.3.4, Eric 2026-11-20: "what's yours stays yours").
+  - The context snapshot no longer appends "Recent messages from other channels" to a user's profile. A reply in a group used to carry what the user had said in a DM.
+  - A conversation memory now carries the room it was learned in: the engine stamps `room:<channel id>` at MEMORIZE and strips any such tag the model supplied. RECALL, and the connected nodes in a recall result or a user profile, withhold anything learned in another room, and anything naming a room where the room is unknown.
+  - Still a recorded divergence until Agent 3.0's audience model (an audience per prompt segment, intersected across its sources, checked before SPEAK, edge writes and trace egress): memories written before 2.23.2 carry no room, and what the model writes from what it read is not yet checked against the audience.
+- **A recorded base link anchors the profile at once.** The profile used to be re-checked only on the next identity load, so for a custom template the deferral list (and the client's approve gate) still read "unanchored" after the base link was recorded (RATCHET run 44854632378). The Wise Authority service now re-runs the boot check's identity load as soon as it records a base link. Best effort: a failed re-check never fails the resolve.
+- **An agent's own identity proposal reaches a Wise Authority.** An identity-scope MEMORIZE with no verified approval used to become a PONDER, so the agent's proposed wording never reached a WA (RATCHET run 44774304572). It still never runs the second pass and never stores anything (#1320). Instead it becomes a DEFER that carries the proposal: the exact proposed text and its M-1 justification, with a code-written summary. The WA approves those exact bytes. Action selection names no node (#1027), so the wording comes from the memorize second pass. It runs only as a drafter here: only a drafted identity node's text and M-1 are read, and its result is never returned or executed. A write the second pass drafts no identity wording for still PONDERs.
+- **An approved amendment reads a fresh profile.** The chain head an amendment follows came from the newest profile check, and a base link the Wise Authority approved after that check left the head reading "unanchored". The approved amendment was then refused for having no head (RATCHET runs 44776804283, 44780287540). The memorize handler now re-checks the profile before reading the head unless the cached check is VERIFIED.
+- **The context manifest records the facts the guard evaluated** (`facts`: signed_guidance_in_force, amendment_in_force, id_scoped, advisory_rule). A checker can now test the facts against the scenario on their own, so a wrong fact cannot hide its own missing segment. The trace format label is **3.1.1**, with its own file `trace_format_v3_1_1.json`. Its definitions are closed, so a new member takes a new label, by which an admitter selects the pinned schema (CC 3.1.5). `trace_format_v3_1_0.json` stays frozen at its v2.23.0 bytes (sha256 bc2dd9ac…e1c3).
+- **The resolve 409 for a deferral with no signed request row carries a reason id,** `wa.no_signed_request_row` in `error.details.reason_id`, so a client can show it in the user's language.
+- **The mock LLM's identity writes state an M-1 justification.** The mock never carried `m1_justification`, so on mock runs every WA-approved amendment was deferred back and the context map could never show an amendment land. The mock's identity-scope MEMORIZE and its MSASPDMA answer now carry one.
+
 ## [2.23.1-stable] - 2026-11-20
 
 ### Fixed

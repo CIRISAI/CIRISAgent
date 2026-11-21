@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ciris_engine.logic.buses import BusManager
     from ciris_engine.logic.services.governance.consent import ConsentService
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
     from ciris_engine.schemas.runtime.models import WAAuthorization
 
 logger = logging.getLogger(__name__)
@@ -529,6 +530,71 @@ def identity_redeferral(
     )
 
 
+#: The node attributes an identity-scope write carries its proposed wording in, in the order read.
+IDENTITY_PROPOSAL_TEXT_ATTRIBUTES = ("statement", "content")
+
+
+def proposed_identity_text(node: GraphNode) -> Optional[str]:
+    """The wording an unapproved identity-scope write proposes, stripped; None when it states none."""
+    attributes = _attributes_dict(node)
+    for key in IDENTITY_PROPOSAL_TEXT_ATTRIBUTES:
+        value = attributes.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def identity_proposal_deferral(
+    node: GraphNode, *, channel_id: Optional[str] = None
+) -> Optional["ActionSelectionDMAResult"]:
+    """A DEFER asking a Wise Authority to approve the identity change this write proposes; None if it states none.
+
+    The agent's proposed wording goes to the WA in a deferral, with its M-1 justification, for approval
+    (Eric, 2026-11-20). An identity write that no verified approval covers is never stored and its second pass
+    never runs (#1320); it becomes this proposal instead of a PONDER, so the WA can approve these exact bytes.
+    The summary is code-written: nothing tells the user the change was applied.
+    """
+    text = proposed_identity_text(node)
+    if text is None:
+        return None
+    from ciris_engine.schemas.actions.parameters import (
+        IDENTITY_CHANGE_CONTEXT_KEY,
+        M1_JUSTIFICATION_CONTEXT_KEY,
+        PROPOSED_AMENDMENT_CONTEXT_KEY,
+        DeferParams,
+    )
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+    from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
+    justification = reviewed_justification(node)
+    proposal = IdentityChangeProposal(
+        kind=IdentityChangeKind.AMENDMENT,
+        summary="The agent proposes an identity change for a Wise Authority to approve",
+        proposed_text=text,
+        m1_justification=justification,
+    )
+    context: Dict[str, Any] = {
+        PROPOSED_AMENDMENT_CONTEXT_KEY: text,
+        IDENTITY_CHANGE_CONTEXT_KEY: proposal.model_dump_json(),
+    }
+    if justification is not None:
+        context[M1_JUSTIFICATION_CONTEXT_KEY] = justification
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.DEFER,
+        action_parameters=DeferParams(
+            channel_id=channel_id,
+            reason=proposal.summary,
+            context=context,
+            reason_code=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
+            needs_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+            proposed_amendment=text,
+            m1_justification=justification,
+        ),
+        rationale="IDENTITY-CHANGE-PROPOSAL: an identity write with no verified approval goes to a Wise Authority",
+    )
+
+
 def identity_objection_of(conscience_result: Any) -> Optional[Any]:
     """The typed objection that overrode a conscience pass, as the WA is shown it; None when there was none.
 
@@ -921,6 +987,7 @@ async def fetch_connected_nodes(
     node: GraphNode,
     bus_manager: "BusManager",
     handler_name: str,
+    channel_id: Optional[str] = None,
 ) -> List[ConnectedNodeInfo]:
     """Fetch connected nodes for a recalled node via edges.
 
@@ -928,6 +995,8 @@ async def fetch_connected_nodes(
         node: Node to get connections for
         bus_manager: Bus manager for memory operations
         handler_name: Name of calling handler
+        channel_id: The room the recall happens in; a connected node learned in another room is withheld
+            (CC 1.13.3.4)
 
     Returns:
         List of connected node info
@@ -952,6 +1021,10 @@ async def fetch_connected_nodes(
                 )
                 if connected_results:
                     connected_node = connected_results[0]
+                    from ciris_engine.logic.context.room_audience import visible_in
+
+                    if not visible_in(connected_node, channel_id):
+                        continue
                     connected_attrs = serialize_attributes_to_json(connected_node.attributes)
 
                     connected_node_info = ConnectedNodeInfo(

@@ -21,6 +21,8 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
+from ciris_engine.logic.context.room_audience import node_room, stamp_room
+
 from ciris_engine.logic.buses.bus_manager import BusManager
 from ciris_engine.logic.handlers.memory.memorize_handler import MemorizeHandler
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
@@ -267,7 +269,7 @@ class TestMemorizeHandler:
             assert memorize_call.kwargs["node"].type == NodeType.OBSERVATION
             assert memorize_call.kwargs["node"].scope == GraphScope.LOCAL
             assert memorize_call.kwargs["node"].attributes["content"] == "User prefers detailed explanations"
-            assert memorize_call.kwargs["node"].attributes["tags"] == ["user_preference", "communication_style"]
+            assert [t for t in memorize_call.kwargs["node"].attributes["tags"] if not t.startswith("room:")] == ["user_preference", "communication_style"]
             assert memorize_call.kwargs["handler_name"] == "MemorizeHandler"
 
             # Verify thought status was updated (in base handler)
@@ -447,7 +449,7 @@ class TestMemorizeHandler:
 
                 # Verify tags were passed correctly
                 memorize_call = mock_memory_bus.memorize.call_args
-                assert memorize_call.kwargs["node"].attributes["tags"] == tags
+                assert [t for t in memorize_call.kwargs["node"].attributes["tags"] if not t.startswith("room:")] == tags
 
     @pytest.mark.asyncio
     async def test_empty_content_handling(

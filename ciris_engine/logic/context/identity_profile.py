@@ -288,21 +288,39 @@ def shipped_template_verified(template: Optional[str], base_digest: str) -> Tupl
 # ------------------------------------------------------------------------ chain
 
 
+#: The ``refs.prev`` a first amendment names when its base is a pre-approved shipped template (Eric, 2026-11-20:
+#: "the template ships pre-approved"). The base is DERIVED, not a row: the accord-holder-signed template manifest
+#: is the authority, verified at boot. The hex is the template file's own sha256 (its manifest checksum), never the
+#: manifest's: a release re-signs the manifest, and only a change to the template's bytes should break the chain.
+TEMPLATE_BASE_PREFIX = "template:"
+
+
+def template_base_ref(template_digest: str) -> str:
+    """The derived base's reference for a pre-approved shipped template: ``template:<64 lowercase hex>``."""
+    return f"{TEMPLATE_BASE_PREFIX}{_bare_hex(template_digest).lower()}"
+
+
 class ProfileChain(BaseModel):
     """The signed chain as the rows name it: the base, the counted links, and what does not count."""
 
     base: Optional[IdentityAmendment] = None
+    #: A pre-approved shipped template's base (``template:<digest>``), when no base row exists.
+    derived_base: Optional[str] = None
     links: List[IdentityAmendment] = []
     contested_row_ids: List[str] = []
     waiting_row_ids: List[str] = []
 
 
-def build_chain(amendments: Sequence[IdentityAmendment]) -> ProfileChain:
+def build_chain(amendments: Sequence[IdentityAmendment], derived_base: Optional[str] = None) -> ProfileChain:
     """Order the verified links by what they name (``refs.prev``), from the base.
 
     Only links whose own rows verified take part. Two links naming one slot
     (one ``prev``, or two bases) are concurrent: neither counts, and the chain
     stops before them. A link whose ``prev`` is not in the chain waits.
+
+    ``derived_base`` (``template:<digest>``) is a pre-approved shipped template's base: used when no base ROW
+    exists, so the first amendment names it as its ``prev``. A base row (a Wise Authority approved this
+    template by hand) still takes precedence.
     """
     linked = [a for a in amendments if a.verified and a.amendment_attestation_id and a.approved_sha256]
     bases = [a for a in linked if a.base and a.amendment_row_prev is None]
@@ -312,11 +330,15 @@ def build_chain(amendments: Sequence[IdentityAmendment]) -> ProfileChain:
             children.setdefault(a.amendment_row_prev, []).append(a)
     if len(bases) > 1:
         return ProfileChain(contested_row_ids=sorted(str(b.amendment_attestation_id) for b in bases))
-    if not bases:
+    if not bases and derived_base is None:
         return ProfileChain(waiting_row_ids=sorted(str(a.amendment_attestation_id) for a in linked if not a.base))
-    chain = ProfileChain(base=bases[0])
-    placed = {str(bases[0].amendment_attestation_id)}
-    cursor = str(bases[0].amendment_attestation_id)
+    if bases:
+        chain = ProfileChain(base=bases[0])
+        cursor = str(bases[0].amendment_attestation_id)
+    else:
+        chain = ProfileChain(derived_base=derived_base)
+        cursor = str(derived_base)
+    placed = {cursor}
     while cursor in children:
         nxt = children[cursor]
         if len(nxt) > 1:
@@ -333,10 +355,16 @@ def build_chain(amendments: Sequence[IdentityAmendment]) -> ProfileChain:
 
 
 def expected_profile_digest(chain: ProfileChain) -> Optional[str]:
-    """SHA-256 over the chain's SIGNED digests: d0 the base link's, then each link's; None with no base."""
-    if chain.base is None or not chain.base.approved_sha256:
-        return None
-    return profile_digest(chain.base.approved_sha256, [str(a.approved_sha256) for a in chain.links])
+    """SHA-256 over the chain's SIGNED digests: d0 the base's, then each link's; None with no base.
+
+    For a derived base d0 is the template digest the holder-signed manifest records (in ``template:<digest>``).
+    """
+    links = [str(a.approved_sha256) for a in chain.links]
+    if chain.base is not None and chain.base.approved_sha256:
+        return profile_digest(chain.base.approved_sha256, links)
+    if chain.derived_base is not None:
+        return profile_digest(chain.derived_base[len(TEMPLATE_BASE_PREFIX) :], links)
+    return None
 
 
 # ------------------------------------------------------------------------- check
@@ -377,7 +405,8 @@ def check_identity_profile(
     """
     base_digest, template = held_base_digest(base)
     template_ok, template_reason = shipped_template_verified(template, base_digest)
-    chain = build_chain(amendments)
+    # A shipped template the accord holder pre-approved is the anchored base: no deferral, no row (Eric, 2026-11-20).
+    chain = build_chain(amendments, derived_base=template_base_ref(base_digest) if template_ok else None)
     held_digests = [hashlib.sha256(a.content.encode("utf-8")).hexdigest() for a in chain.links]
     held = profile_digest(base_digest, held_digests)
     expected = expected_profile_digest(chain)
@@ -401,7 +430,7 @@ def check_identity_profile(
         template=template,
         template_verified=template_ok,
         base_digest=_bare_hex(base_digest),
-        base_row_id=chain.base.amendment_attestation_id if chain.base else None,
+        base_row_id=chain.base.amendment_attestation_id if chain.base else chain.derived_base,
         chain_row_ids=[str(a.amendment_attestation_id) for a in counted],
         amendment_digests=[str(a.approved_sha256) for a in counted],
         contested_row_ids=chain.contested_row_ids,
@@ -410,7 +439,7 @@ def check_identity_profile(
     if status != IdentityProfileStatus.VERIFIED:
         _report_incident(profile)
     keep = {id(a) for a in counted}
-    if counted or (status == IdentityProfileStatus.VERIFIED and chain.base is not None):
+    if chain.base is not None and (counted or status == IdentityProfileStatus.VERIFIED):
         keep.add(id(chain.base))
     return [a if id(a) in keep or not a.verified else a.model_copy(update={"verified": False}) for a in amendments], profile
 
@@ -459,6 +488,35 @@ def set_base_link_opener(opener: Optional[BaseLinkOpener]) -> None:
     """Register (or clear) what opens the base-link deferral. The Wise Authority service, at start/stop."""
     global _base_link_opener
     _base_link_opener = opener
+
+
+#: What re-runs the whole-profile check (the runtime's boot check, same load path as the context builders).
+ProfileRefresher = Callable[[], Awaitable[None]]
+_profile_refresher: Optional[ProfileRefresher] = None
+
+
+def set_profile_refresher(refresher: Optional[ProfileRefresher]) -> None:
+    """Register (or clear) what re-checks the profile. The runtime, once its memory service is up."""
+    global _profile_refresher
+    _profile_refresher = refresher
+
+
+async def refresh_identity_profile() -> bool:
+    """Re-check the profile now; True when a refresher ran. Never raises.
+
+    Called when a base link is recorded, so the profile reads anchored at once (the deferral list, the client's
+    approve gate) instead of on the next identity load (RATCHET run 44854632378: still "unanchored" 30 s after
+    the base link was recorded).
+    """
+    refresher = _profile_refresher
+    if refresher is None:
+        return False
+    try:
+        await refresher()
+    except Exception as exc:  # noqa: BLE001 - the next identity load re-checks
+        logger.warning(f"identity profile: re-check after a base link failed ({type(exc).__name__})")
+        return False
+    return True
 
 
 def _template_manifest_version(manifest_dirs: Optional[Sequence[Path]] = None) -> Optional[str]:

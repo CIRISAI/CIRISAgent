@@ -251,7 +251,7 @@ async def test_the_loader_reads_refs_prev_and_the_base_link_from_the_signed_rows
 
 def _signed_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verifies: bool = True) -> None:
     """A copy of the shipped manifest under a fake root-WA hybrid signature, with a directory record."""
-    manifest_bytes = (Path(ip.MANIFEST_DIRS[1]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes()
+    manifest_bytes = (Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes()
     (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes(manifest_bytes)
     (tmp_path / ip.TEMPLATE_MANIFEST_SIGNATURE_FILE).write_text(
         json.dumps(
@@ -285,9 +285,51 @@ def _signed_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verifies: 
 def test_the_shipped_template_is_checked_against_the_root_signed_manifest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """The shipped template ships pre-approved (Eric, 2026-11-20): a holder-signed manifest anchors it, no WA step."""
     _signed_manifest(monkeypatch, tmp_path)
     _, profile = ip.check_identity_profile(_base_of("default"), [])
-    assert profile.status == IdentityProfileStatus.UNANCHORED and profile.template_verified is True
+    assert profile.status == IdentityProfileStatus.VERIFIED and profile.template_verified is True
+    assert profile.base_row_id == ip.template_base_ref(DEFAULT_SHA)
+    assert ip.proposed_base_link(profile) is None, "no base-link deferral for a pre-approved template"
+
+
+def test_the_first_amendment_chains_off_the_pre_approved_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _signed_manifest(monkeypatch, tmp_path)
+    first = _link("row-1", "I answer to Dana Reyes.", prev=ip.template_base_ref(DEFAULT_SHA))
+    second = _link("row-2", "I keep replies short.", prev="row-1")
+    amendments, profile = ip.check_identity_profile(_base_of("default"), [first, second])
+    assert profile.status == IdentityProfileStatus.VERIFIED
+    assert profile.chain_row_ids == ["row-1", "row-2"]
+    assert all(a.verified for a in amendments)
+    ip._latest_profile = profile
+    try:
+        assert ip.chain_head_row_id() == ("row-2", "")
+    finally:
+        ip._latest_profile = None
+
+
+def test_the_template_sentinel_is_the_templates_checksum_not_the_manifests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A release re-signs the manifest; only a change to the template's own bytes may break the chain."""
+    _signed_manifest(monkeypatch, tmp_path)
+    manifest_sha = hashlib.sha256((tmp_path / ip.TEMPLATE_MANIFEST_FILE).read_bytes()).hexdigest()
+    stray = _link("row-1", "I answer to Dana Reyes.", prev=f"template:{manifest_sha}")
+    _, profile = ip.check_identity_profile(_base_of("default"), [stray])
+    assert profile.chain_row_ids == [] and profile.waiting_row_ids == ["row-1"]
+
+
+def test_a_base_row_still_wins_over_the_derived_base(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A template a WA approved by hand (2.23.1) keeps its row as the base."""
+    _signed_manifest(monkeypatch, tmp_path)
+    _, profile = ip.check_identity_profile(_base_of("default"), [_base_link()])
+    assert profile.status == IdentityProfileStatus.VERIFIED and profile.base_row_id == "row-base"
+
+
+def test_an_unsigned_or_custom_template_still_asks_a_wise_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
+    monkeypatch.setattr(ip, "MANIFEST_DIRS", (tmp_path,))
+    _, profile = ip.check_identity_profile(_base_of("default"), [])
+    assert profile.status == IdentityProfileStatus.UNANCHORED
+    assert ip.proposed_base_link(profile) is not None
 
 
 @pytest.mark.parametrize("verifies", [False])
@@ -304,7 +346,7 @@ def test_a_manifest_edited_after_signing_is_not_verified(monkeypatch: pytest.Mon
 
 
 def test_today_the_manifest_has_no_root_wa_hybrid_signature(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[1]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
+    (tmp_path / ip.TEMPLATE_MANIFEST_FILE).write_bytes((Path(ip.MANIFEST_DIRS[0]) / ip.TEMPLATE_MANIFEST_FILE).read_bytes())
     monkeypatch.setattr(ip, "MANIFEST_DIRS", (tmp_path,))
     assert ip.shipped_template_verified("default", DEFAULT_SHA) == (False, ip.REASON_NO_SIGNATURE)
 

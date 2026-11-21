@@ -572,6 +572,7 @@ class PromptAssembler:
             policy_sha256=self.policy.source_sha256,
             assembler_version=ASSEMBLER_VERSION,
             guard_mode=mode,
+            facts=call.facts,  # what the guard evaluated: a checker can test these facts against the scenario too
             guard_violations=violations,
             segments=records,
             messages_sha256=digest,

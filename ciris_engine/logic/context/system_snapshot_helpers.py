@@ -1817,7 +1817,7 @@ async def _process_user_node_for_profile(
     attrs = _extract_node_attributes(user_node)
 
     # Collect connected nodes using helper
-    connected_nodes_info = await _collect_connected_nodes(memory_service, user_id)
+    connected_nodes_info = await _collect_connected_nodes(memory_service, user_id, channel_id)
 
     # Parse datetime fields safely
     last_interaction = _parse_datetime_safely(attrs.get("last_seen"), "last_seen", user_id)
@@ -1826,15 +1826,8 @@ async def _process_user_node_for_profile(
     # Create user profile using helper
     user_profile = _create_user_profile_from_node(user_id, attrs, connected_nodes_info, last_interaction, created_at)
 
-    # Collect cross-channel messages and add to profile notes
-    if channel_id:
-        recent_messages = await _collect_cross_channel_messages(user_id, channel_id)
-        if recent_messages:
-            # Ensure notes is not None before concatenating
-            current_notes = user_profile.notes or ""
-            user_profile.notes = current_notes + (
-                f"\nRecent messages from other channels: {json.dumps(recent_messages, default=_json_serial_for_users)}"
-            )
+    # No messages from other channels are added (CC 1.13.3.4, Eric 2026-11-20): what a user said in one room, a DM
+    # above all, may be shown only to those in that room, and a reply here would show it to this channel.
 
     logger.info(
         f"Added user profile for {user_id} with attributes: {list(attrs.keys())} and {len(connected_nodes_info)} connected nodes"
@@ -2221,8 +2214,10 @@ def _parse_datetime_safely(raw_value: Any, field_name: str, user_id: str) -> Opt
         return None
 
 
-async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user_id: str) -> List[ConnectedNodeInfo]:
-    """Collect connected nodes for a user node from the memory graph."""
+async def _collect_connected_nodes(
+    memory_service: LocalGraphMemoryService, user_id: str, channel_id: Optional[str] = None
+) -> List[ConnectedNodeInfo]:
+    """Collect connected nodes for a user node; one learned in another room than ``channel_id`` is withheld."""
     connected_nodes_info = []
     try:
         # Get edges for this user node
@@ -2239,6 +2234,10 @@ async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user
             connected_results = await memory_service.recall(connected_query)
             if connected_results:
                 connected_node = connected_results[0]
+                from ciris_engine.logic.context.room_audience import visible_in
+
+                if not visible_in(connected_node, channel_id):
+                    continue  # learned in another room (CC 1.13.3.4)
                 # Extract attributes using our standardized helper
                 connected_attrs = extract_node_attributes(connected_node)
 
@@ -2266,96 +2265,3 @@ def _create_user_profile_from_node(
 ) -> UserProfile:
     """Create a UserProfile from node attributes and connected nodes."""
     return build_user_profile_from_node(user_id, attrs, connected_nodes_info, last_interaction, created_at)
-
-
-async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[JSONDict]:
-    """Collect this user's recent messages in channels other than `channel_id`.
-
-    Post-A1 absorption (CIRISAgent#763): paginate persist's correlation
-    substrate filtering by service_type='communication', then check
-    tags.user_id + tags.channel_id client-side. Persist's CorrelationFilter
-    doesn't predicate on tag-JSON keys directly, so the user_id /
-    channel_id match runs in Python after pagination.
-    """
-    recent_messages: List[JSONDict] = []
-    try:
-        from ciris_engine.logic.persistence.models.graph import get_persist_engine
-
-        engine = get_persist_engine()
-        if engine is None:
-            return recent_messages
-
-        filter_json = json.dumps({"service_type": "communication"})
-        cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
-
-        collected = 0
-        max_messages = 3
-        while collected < max_messages:
-            raw = engine.correlation_query(filter_json, cursor_json, 200)
-            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
-            items = parsed.get("items", []) if isinstance(parsed, dict) else []
-            if not items:
-                break
-
-            for row in items:
-                if not isinstance(row, dict):
-                    continue
-                handler = row.get("handler_name")
-                if handler not in ("ObserveHandler", "SpeakHandler"):
-                    continue
-                tags = row.get("tags") or {}
-                if not isinstance(tags, dict):
-                    try:
-                        tags = json.loads(tags)
-                    except Exception:
-                        continue
-                if str(tags.get("user_id", "")) != user_id:
-                    continue
-                msg_channel = str(tags.get("channel_id", "unknown"))
-                if msg_channel == channel_id:
-                    continue  # Cross-channel ONLY
-
-                req_data = row.get("request_data") or {}
-                if isinstance(req_data, str):
-                    try:
-                        req_data = json.loads(req_data)
-                    except Exception:
-                        req_data = {}
-                # ServiceRequestData stores call args in `parameters` (typed
-                # Dict[str, str]). Pre-2.9.0 a few writers also stamped a
-                # top-level `content`/`message` key; honor those for
-                # backward compatibility but read from parameters first.
-                params = req_data.get("parameters") if isinstance(req_data, dict) else None
-                if not isinstance(params, dict):
-                    params = {}
-                msg_content = (
-                    params.get("content")
-                    or params.get("message")
-                    or (req_data.get("content") if isinstance(req_data, dict) else None)
-                    or (req_data.get("message") if isinstance(req_data, dict) else None)
-                    or f"Message in {msg_channel}"
-                )
-
-                created_at = row.get("created_at", "")
-                ts_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
-                recent_messages.append(
-                    {
-                        "channel": msg_channel,
-                        "content": msg_content,
-                        "timestamp": ts_str,
-                    }
-                )
-                collected += 1
-                if collected >= max_messages:
-                    break
-
-            if len(items) < 200:
-                break
-            next_cursor = next_page_cursor(parsed)
-            if not next_cursor:
-                break
-            cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
-    except Exception as e:
-        logger.warning(f"Failed to collect cross-channel messages for user {user_id}: {e}")
-
-    return recent_messages

@@ -1078,6 +1078,18 @@ class CIRISRuntime(ServicePropertyMixin):
         (``_extract_agent_identity`` -> ``load_identity_profile`` -> ``maybe_open_base_link``), so it asks at most
         once per digest. Best effort: a failure is logged and the first thought checks again.
         """
+        from ciris_engine.logic.context.identity_profile import set_profile_refresher
+
+        refresh_memory: Any = self.memory_service
+
+        async def _refresh() -> None:  # what a recorded base link asks for: anchored at once
+            from ciris_engine.logic.context.system_snapshot_helpers import _extract_agent_identity
+
+            identity, _summary = await _extract_agent_identity(refresh_memory)
+            if identity.profile is not None:
+                logger.info("[IDENTITY-PROFILE] re-checked: %s (%s)", identity.profile.status.value, identity.profile.reason)
+
+        set_profile_refresher(_refresh)
         try:
             from ciris_engine.logic.context.system_snapshot_helpers import _extract_agent_identity
 

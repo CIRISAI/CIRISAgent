@@ -62,6 +62,13 @@ NO_APPROVED_TEXT_NOTICE = "the Wise Authority approved no exact amendment text; 
 REASON_NOT_REVIEWED = "identity_amendment.not_conscience_reviewed"
 
 
+def _dispatch_channel_id(dispatch_context: DispatchContext) -> Optional[str]:
+    """The channel this act happens in, or ``None`` when the dispatch names none."""
+    channel = getattr(dispatch_context, "channel_context", None)
+    channel_id = getattr(channel, "channel_id", None)
+    return channel_id if isinstance(channel_id, str) and channel_id else None
+
+
 class MemorizeHandler(BaseActionHandler):
     """Handler for MEMORIZE actions."""
 
@@ -461,6 +468,11 @@ class MemorizeHandler(BaseActionHandler):
     ) -> Optional[str]:
         """Execute the memorize operation through the bus."""
         thought_id = thought.thought_id
+        if not is_identity_node(node) and not is_config_node(node):
+            # The room it was learned in, stamped by the engine, never the draft (CC 1.13.3.4): recalled only there.
+            from ciris_engine.logic.context.room_audience import stamp_room
+
+            node = stamp_room(node, _dispatch_channel_id(dispatch_context))
 
         try:
             memory_result = await self.bus_manager.memory.memorize(node=node, handler_name=self.__class__.__name__)

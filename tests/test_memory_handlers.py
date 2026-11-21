@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from ciris_engine.logic.context.room_audience import node_room, stamp_room
+
 from ciris_engine.logic.buses.bus_manager import BusManager
 from ciris_engine.logic.handlers.memory.memorize_handler import MemorizeHandler
 from ciris_engine.logic.handlers.memory.recall_handler import RecallHandler
@@ -174,7 +176,8 @@ async def test_memorize_handler_with_graph_node(monkeypatch, persist_engine):
     assert memory_service.memorize.called
     call_args = memory_service.memorize.call_args
     assert call_args is not None
-    assert call_args.kwargs["node"] == node  # Check keyword argument
+    stored = call_args.kwargs["node"]
+    assert node_room(stored) and stored == stamp_room(node, node_room(stored))  # stamped with its room (CC 1.13.3.4)
     assert call_args.kwargs["handler_name"] == "MemorizeHandler"
 
 

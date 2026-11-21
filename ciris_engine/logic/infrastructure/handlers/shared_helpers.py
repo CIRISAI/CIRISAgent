@@ -987,6 +987,7 @@ async def fetch_connected_nodes(
     node: GraphNode,
     bus_manager: "BusManager",
     handler_name: str,
+    channel_id: Optional[str] = None,
 ) -> List[ConnectedNodeInfo]:
     """Fetch connected nodes for a recalled node via edges.
 
@@ -994,6 +995,8 @@ async def fetch_connected_nodes(
         node: Node to get connections for
         bus_manager: Bus manager for memory operations
         handler_name: Name of calling handler
+        channel_id: The room the recall happens in; a connected node learned in another room is withheld
+            (CC 1.13.3.4)
 
     Returns:
         List of connected node info
@@ -1018,6 +1021,10 @@ async def fetch_connected_nodes(
                 )
                 if connected_results:
                     connected_node = connected_results[0]
+                    from ciris_engine.logic.context.room_audience import visible_in
+
+                    if not visible_in(connected_node, channel_id):
+                        continue
                     connected_attrs = serialize_attributes_to_json(connected_node.attributes)
 
                     connected_node_info = ConnectedNodeInfo(

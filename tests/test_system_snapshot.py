@@ -485,15 +485,13 @@ class TestUserProfileEnrichment:
         assert user_555555.display_name == "ContextUser"
 
     @pytest.mark.asyncio
-    async def test_user_profile_with_cross_channel_messages(
+    async def test_a_message_from_another_channel_never_reaches_the_profile(
         self, persist_engine, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
     ):
-        """Test enriching user profiles with messages from other channels.
+        """What a user said in another room (a DM above all) is not shown here (CC 1.13.3.4, Eric 2026-11-20).
 
-        Post-A1 (CIRISAgent#763): `_collect_cross_channel_messages` paginates
-        persist's correlation substrate filtered by service_type='communication',
-        then checks tags.user_id + tags.channel_id client-side. Seed an
-        ObserveHandler correlation in `other_channel` for the target user.
+        The snapshot used to append "Recent messages from other channels" to each user profile, so a reply in a
+        group carried what the user said in private. Seed exactly that message: it must not appear.
         """
         from ciris_engine.logic.persistence.models.correlations import add_correlation
         from ciris_engine.schemas.telemetry.core import (
@@ -577,14 +575,11 @@ class TestUserProfileEnrichment:
                 service_registry=mock_service_registry,
             )
 
-        # Verify user profile was enriched with the cross-channel message.
-        # Post-A1 (CIRISAgent#763), the cross-channel reader pulls
-        # `req_data["parameters"]["content"]` from each row's request_data
-        # (ServiceRequestData stores call args in `parameters: Dict[str,str]`).
         assert len(snapshot.user_profiles) == 1
-        user_profile = snapshot.user_profiles[0]
-        assert "other_channel" in user_profile.notes
-        assert "Hello from other channel" in user_profile.notes
+        notes = snapshot.user_profiles[0].notes or ""
+        assert "Hello from other channel" not in notes
+        assert "other_channel" not in notes
+        assert "Recent messages from other channels" not in snapshot.model_dump_json()
 
 
 class TestAdapterIntegration:

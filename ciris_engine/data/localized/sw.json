@@ -4011,7 +4011,65 @@
     "files_act_appealed": "Rufaa yako imewasilishwa. Mkaguzi wa chumba hiki ataamua.",
     "files_act_ruled": "Uamuzi wako umerekodiwa.",
     "files_act_flagged": "Imewekwa alama. Sasa iko nyuma ya ilani.",
-    "files_act_flag_cleared": "Alama imeondolewa."
+    "files_act_flag_cleared": "Alama imeondolewa.",
+    "wa_identity_amendment_title": "Ombi la kubadilisha utambulisho wa wakala huyu",
+    "wa_identity_base_link_title": "Ambatisha utambulisho wa wakala huyu kwenye kiolezo chake",
+    "wa_identity_base_link_custom_note": "Wakala huyu anatumia kiolezo maalum. Idhinishe kama msingi wa utambulisho wa wakala huyu.",
+    "wa_identity_reapproval_title": "Idhinisha tena marekebisho ya utambulisho yaliyopo",
+    "wa_identity_unreadable_title": "Mabadiliko ya utambulisho ambayo programu hii haiwezi kusoma",
+    "wa_identity_unreadable_note": "Programu hii haiwezi kuonyesha ombi hili kamili, hivyo haliwezi kuidhinishwa hapa. Muhtasari na maelezo yake yapo hapa chini. Likatae ukitoa sababu, au ufungue kwenye programu mpya zaidi.",
+    "wa_identity_reapproval_note": "Marekebisho haya yalitangulia idhini ya maandishi kamili. Hayahesabiwi hadi yataidhinishwa tena.",
+    "wa_identity_exact_text": "Maandishi kamili unayoyaidhinisha",
+    "wa_identity_edited_by_wa": "Imehaririwa na Wise Authority",
+    "wa_identity_why": "Kwa nini (M-1, Upatanifu Badilifu)",
+    "wa_identity_no_justification": "Hakuna sababu iliyotolewa.",
+    "wa_identity_objection": "Dhamiri ya {conscience} ya wakala ilipinga ({type}): {reason}",
+    "wa_identity_template_name": "Kiolezo",
+    "wa_identity_template_version": "Toleo",
+    "wa_identity_manifest_digest": "Dijesti ya manifesti",
+    "wa_identity_copy_digest": "Nakili dijesti",
+    "wa_identity_guidance_optional": "Mwongozo (si lazima kuidhinisha, lakini unahitajika kukataa)",
+    "wa_identity_reject_why": "Ili kukataa, eleza sababu, ili wakala aweze kupendekeza maneno mapya",
+    "wa_identity_blocked_base_link_first": "Idhinisha kiungo cha msingi cha wakala huyu kwanza. Hadi utambulisho wake utakapoankishwa kwenye kiolezo chake, mabadiliko yaliyoidhinishwa hayawezi kutumika.",
+    "wa_identity_blocked_outer_whitespace": "Maandishi haya yanaanza au kuishia na nafasi au mstari mpya, jambo ambalo wakala analikataa. Hayajabadilishwa hapa, hivyo hayawezi kuidhinishwa. Kataa na umwombe wakala apendekeze tena.",
+    "wa_identity_blocked_no_digest": "Ombi hili halina dijesti kamili ya kiolezo, hivyo haliwezi kuidhinishwa.",
+    "wa_identity_blocked_agent_cannot_bind": "Wakala huyu hawezi kuunganisha idhini na ombi hili kamili, hivyo haliwezi kuidhinishwa hapa.",
+    "wa_identity_approved": "Imeidhinishwa. Dhamiri za wakala huyu zitaipitia kabla haijatumika.",
+    "wa_identity_rejected": "Imekataliwa. Wakala anaweza kupendekeza maneno mapya.",
+    "wa_identity_not_resolved": "Ombi hili halikutatuliwa. Wise Authority mwingine huenda aliamua kwanza.",
+    "wa_identity_failed": "Uamuzi haukuweza kutumwa: {detail}",
+    "wa_identity_receipt_request": "Omba risiti",
+    "wa_identity_receipt_response": "Risiti ya jibu lako",
+    "wa_identity_profile_unanchored": "Utambulisho wa wakala huyu bado haujaankishwa. Idhinisha kiungo chake cha msingi kwanza.",
+    "wa_identity_profile_mismatch": "Utambulisho wa wakala huyu haulingani na kiolezo chake kilichoidhinishwa. Hakuna mabadiliko ya utambulisho yatakayotumika hadi hilo litatuliwe.",
+    "wa_identity_profile_contested": "Utambulisho wa wakala huyu unabishaniwa. Hakuna mabadiliko ya utambulisho yatakayotumika hadi hilo litatuliwe.",
+    "wa_identity_profile_unknown": "Wakala huyu aliripoti hali ya utambulisho ambayo programu hii haijui.",
+    "wa_identity_open_base_link": "Fungua ombi la kiungo cha msingi",
+    "accord_edition2_offline_ceremony": "Nodi hii inaendesha mesh ya v62. Mzizi wake wa uaminifu huundwa nje ya mtandao, kwa kutumia zana ya sherehe. Kwa sababu hiyo, programu hii haitoi hapa vitendo vya mesh ya awali: kuandikisha nodi, kubadilisha nodi rasmi, kuchapisha upya mzizi wa uaminifu, kubariki wafanyakazi wa CI, au kukabidhi jukumu.",
+    "accord_edition_unknown": "Nodi hii haijasema toleo gani la mesh inaloendesha, hivyo vitendo vinavyotofautiana kati ya matoleo havitolewi mpaka itakaposema.",
+    "invites_seat_approve": "Idhinisha kujiunga",
+    "invites_seat_approved": "Umeidhinisha kujiunga kwao.",
+    "invites_seat_approved_of": "Umeidhinisha. Wanachama {signed} kati ya {required} wametia saini.",
+    "invites_seat_declined": "Umekataa kujiunga kwao.",
+    "invites_seat_waiting": "Inasubiri wanachama wa chumba waidhinishe kujiunga kwao.",
+    "invites_seat_confirm_title": "Idhinisha kujiunga kwa {name}?",
+    "invites_seat_confirm_means": "Wanajiunga na chumba sasa na wanaweza kusoma kile ambacho chumba kinashikilia tangu wakati huo.",
+    "invites_seat_confirm_means_quorum": "Idhini yako imetiwa saini kwa ufunguo wako. Wanajiunga mara wanachama {required} watakapokuwa wameidhinisha, na wanaweza kusoma kile ambacho chumba kinashikilia tangu wakati huo.",
+    "invites_notice_seated": "Wamejiunga na chumba.",
+    "invites_notice_seat_awaiting": "Idhini yako imerekodiwa. Wanachama wengine bado wanahitaji kuidhinisha.",
+    "accord_kind_confirmed": "KUSIMAMISHWA KULIKOTHIBITISHWA — KUNATHIBITISHA KUSIMAMISHWA KUNAKOTUMIKA",
+    "accord_binding_confirmed": "imethibitishwa · wengi thabiti wa washikilizi wanathibitisha kusimamishwa kulikotajwa ambako tayari kunatumika. Si kusimamishwa kipya wala tangazo.",
+    "constitutional_halt_not_halted": "Hakuna kusimamishwa kunakotumika katika nodi hii.",
+    "constitutional_halt_lone": "Mshikilizi mmoja amesimamisha nodi hii. Kusimamishwa kunaisha muda wake isipokuwa wengi thabiti wa washikilizi wathibitishe.",
+    "constitutional_halt_lone_lapses": "Mshikilizi mmoja amesimamisha nodi hii. Kusimamishwa kunaisha muda wake saa {time} isipokuwa wengi thabiti wa washikilizi wathibitishe.",
+    "constitutional_halt_confirmed": "Wengi thabiti wa washikilizi wamethibitisha kusimamishwa huku. Kunabaki kutumika mpaka washikilizi watakaporejea.",
+    "constitutional_halt_lapsed": "Hakuna kusimamishwa kunakotumika. Kusimamishwa kwa mwisho kuliisha muda wake kwa sababu hakuna wengi wa washikilizi waliothibitisha kwa wakati.",
+    "constitutional_armed_yes": "Imewekwa tayari: genesis inatumika, washikilizi wake wamewekwa, na nodi hii inakubali mzizi huo wa uaminifu, hivyo kusimamishwa kwa mshikilizi kunaifikia.",
+    "constitutional_armed_no": "Haijawekwa tayari: kusimamishwa kwa mshikilizi hakungefikia nodi hii.",
+    "constitutional_armed_unknown": "Kama kusimamishwa kwa mshikilizi kungefikia nodi hii hakujulikani: nodi hii haitoi taarifa hiyo.",
+    "constitutional_holders_count_m_unknown": "{n} washikilizi wa accord. Nodi haikutoa taarifa ni wangapi kati yao wanaohitajika kukubaliana.",
+    "chat_file_added": "{who} aliongeza {name} kwenye chumba",
+    "chat_file_added_you": "Uliongeza {name} kwenye chumba"
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Ni mtu tu anayekagua usimamizi wa chumba hiki ndiye anayeweza kuamua kuhusu rufaa.",
     "unknown_outcome": "Uamuzi husema alama inabaki, kwamba rufaa ni sahihi kwa sehemu, au kwamba alama imeondolewa.",
     "nothing_to_rule": "Hakuna aliyekata rufaa dhidi ya alama ya kipengele hicho, kwa hivyo hakuna cha kuamua.",
-    "appeal_failed": "Rufaa haikuweza kutiwa saini na kurekodiwa, hivyo hakuna kilichobadilika."
+    "appeal_failed": "Rufaa haikuweza kutiwa saini na kurekodiwa, hivyo hakuna kilichobadilika.",
+    "nothing_to_take_down": "Kipengele hicho hakina maudhui tofauti ya kuondoa.",
+    "takedown_needs_reason": "Eleza kwa maneno yako mwenyewe kwa nini unakiondoa kipengele hiki.",
+    "takedown_failed": "Uondoaji haukuweza kutiwa saini na kurekodiwa, hivyo hakuna kilichobadilika."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "declared_length_mismatch": "Ukubwa wa faili haukufanana na ukubwa ulioelezwa. Hakuna kilichoandikwa; tuma tena.",
     "delegate_may_not_author": "mkabidhiwa hawezi kuandika, kubadilisha au kuondoa faili: safu hiyo hutiwa saini kwenye grafu kama tendo la mmiliki mwenyewe, na ukabidhi unaoisha hauwezi kubatilisha saini hiyo",
     "withheld_by_moderation": "Msimamizi wa chumba hiki ameweka alama kwenye faili hili, hivyo linabaki limefichwa mpaka uchague kuliona.",
-    "flagged_by_moderation": "msimamizi wa chumba hiki ameweka alama kwenye faili hili; linabaki kwenye chumba wakati alama hiyo ipo"
+    "flagged_by_moderation": "msimamizi wa chumba hiki ameweka alama kwenye faili hili; linabaki kwenye chumba wakati alama hiyo ipo",
+    "no_rendition": "Faili hii haina hakikisho ambalo nodi hii inaweza kutengeneza.",
+    "image_too_large": "Picha hii ni kubwa mno kwa nodi hii kutengeneza hakikisho.",
+    "image_undecodable": "Nodi hii haikuweza kusoma picha hii ili kutengeneza hakikisho.",
+    "unknown_rendition": "Programu iliomba aina ya hakikisho ambayo nodi hii haitengenezi."
   },
   "notes": {
     "author_signer_unavailable": "Nodi hii haiwezi kutia saini kama wewe kwa sasa, kwa hivyo kumbukumbu haikuandikwa.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Kanuni ya chumba inahitaji saini zaidi kabla mabadiliko haya kuanza kutumika.",
     "store_unavailable": "Nodi haikuweza kusoma au kuandika saraka yake.",
     "write_failed": "Nodi haikuweza kuandika mabadiliko hayo.",
-    "two_people_only": "Kwa sasa, chumba kinashikilia watu wawili."
+    "two_people_only": "Kwa sasa, chumba kinashikilia watu wawili.",
+    "room_full": "Chumba hiki kimejaa."
   },
   "partnership_queue": {
     "title": "Kushirikiana na wakala huyu",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "Kushiriki skrini yako hakupatikani bado kwenye nodi hii.",
     "leave_reason_unknown": "Hiyo si sababu ya kuondoka kwenye simu.",
     "video_two_people_only": "Video na kushiriki skrini hufanya kazi kwenye simu kati ya watu wawili kwa sasa. Simu hii ina watu zaidi, hivyo ni ya sauti pekee. Ikiwa kamera yako imewashwa, itaanza kutuma tena wakati simu itakaporudi kuwa ya watu wawili.",
-    "relay_canonical_audio_only": "Video yao haiwezi kukufikia kwa sasa: njia iliyo baina yenu inabeba sauti pekee. Bado unaweza kuwasikia."
+    "relay_canonical_audio_only": "Video yao haiwezi kukufikia kwa sasa: njia iliyo baina yenu inabeba sauti pekee. Bado unaweza kuwasikia.",
+    "share_already_live": "Tayari unashiriki skrini yako.",
+    "no_share": "Hushiriki skrini yako kwa sasa."
   },
   "decisions": {
     "not_found": "Uamuzi huo haupo wazi kwako tena.",
     "awaiting_members": "Jibu lako limerekodiwa. Wanachama wengine bado wanahitaji kuidhinisha kabla hii kuanza kutumika."
+  },
+  "wa": {
+    "resolve_one_subject": "Idhinisha ama maandishi au dijesti ya kiolezo, si vyote viwili.",
+    "base_link_digest_requires_approve": "Dijesti ya kiolezo inaweza kutumwa tu pamoja na Idhinisha.",
+    "base_link_digest_mismatch": "Dijesti hiyo ya kiolezo haifanani na ile iliyopendekezwa na wakala huyu. Onyesha upya na ujaribu tena.",
+    "amendment_text_requires_approve": "Maandishi ya marekebisho yanaweza kutumwa tu pamoja na Idhinisha.",
+    "no_signed_request_row": "Uahirishaji huu hauna ombi lililosainiwa, hivyo hakuna kitu ambacho jibu lako lililosainiwa linaweza kujibu."
+  },
+  "deferral": {
+    "unknown_request": "Nodi haijui ombi la uahirishaji huu."
   }
 }

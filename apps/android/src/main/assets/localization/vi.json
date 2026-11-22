@@ -4424,7 +4424,65 @@
     "call_h264_failed_load": "Codec H.264 đã được tải xuống, nhưng máy tính này không thể nạp nó. Hãy thử lại, hoặc tắt video H.264, việc này sẽ xóa codec.",
     "call_h264_needed": "Có người trong cuộc gọi này đang gửi video H.264. Hãy bật video H.264 để xem.",
     "call_h264_licence": "Hiện giấy phép",
-    "call_h264_licence_hide": "Ẩn giấy phép"
+    "call_h264_licence_hide": "Ẩn giấy phép",
+    "accord_edition2_offline_ceremony": "Nút này chạy mesh v62. Gốc tin cậy của nó được tạo ngoại tuyến, bằng công cụ nghi thức. Vì lý do đó, ứng dụng này không cung cấp các hành động của mesh trước đây ở đây: kết nạp một nút, thay đổi một nút chuẩn, phát hành lại gốc tin cậy, chúc phúc cho các CI worker, hoặc trao một nhiệm vụ.",
+    "accord_edition_unknown": "Nút này chưa cho biết nó chạy phiên bản mesh nào, nên các hành động khác nhau giữa các phiên bản sẽ không được cung cấp cho đến khi nó làm vậy.",
+    "invites_seat_approve": "Chấp thuận tham gia",
+    "invites_seat_approved": "Bạn đã chấp thuận họ tham gia.",
+    "invites_seat_approved_of": "Bạn đã chấp thuận. {signed} trong {required} thành viên đã ký.",
+    "invites_seat_declined": "Bạn đã từ chối họ tham gia.",
+    "invites_seat_waiting": "Đang chờ các thành viên của phòng chấp thuận họ tham gia.",
+    "invites_seat_confirm_title": "Chấp thuận cho {name} tham gia?",
+    "invites_seat_confirm_means": "Họ sẽ tham gia phòng ngay bây giờ và có thể đọc những gì phòng lưu giữ kể từ đó.",
+    "invites_seat_confirm_means_quorum": "Sự chấp thuận của bạn được ký bằng khóa của bạn. Họ sẽ tham gia khi {required} thành viên đã chấp thuận, và có thể đọc những gì phòng lưu giữ kể từ đó.",
+    "invites_notice_seated": "Họ đã tham gia phòng.",
+    "invites_notice_seat_awaiting": "Sự chấp thuận của bạn đã được ghi lại. Các thành viên khác vẫn cần chấp thuận.",
+    "accord_kind_confirmed": "Lệnh tạm dừng đã xác nhận — xác nhận lệnh tạm dừng đang có hiệu lực",
+    "accord_binding_confirmed": "đã xác nhận · đa số nghiêm ngặt của những người giữ xác nhận lệnh tạm dừng được nêu tên đang có hiệu lực. Đây không phải là một lệnh tạm dừng mới, cũng không phải là một thông báo.",
+    "constitutional_halt_not_halted": "Không có lệnh tạm dừng nào đang có hiệu lực trên nút này.",
+    "constitutional_halt_lone": "Một người giữ đã tạm dừng nút này. Lệnh tạm dừng sẽ hết hiệu lực trừ khi đa số nghiêm ngặt của những người giữ xác nhận nó.",
+    "constitutional_halt_lone_lapses": "Một người giữ đã tạm dừng nút này. Lệnh tạm dừng sẽ hết hiệu lực vào lúc {time} trừ khi đa số nghiêm ngặt của những người giữ xác nhận nó.",
+    "constitutional_halt_confirmed": "Đa số nghiêm ngặt của những người giữ đã xác nhận lệnh tạm dừng này. Nó vẫn có hiệu lực cho đến khi những người giữ khôi phục hoạt động.",
+    "constitutional_halt_lapsed": "Không có lệnh tạm dừng nào đang có hiệu lực. Lệnh tạm dừng gần nhất đã hết hiệu lực vì không có đa số người giữ xác nhận nó kịp thời.",
+    "constitutional_armed_yes": "Đã được kích hoạt: một khởi nguyên đang có hiệu lực, những người giữ của nó đã được sắp đặt, và nút này chấp nhận gốc tin cậy đó, nên lệnh tạm dừng của một người giữ sẽ đến được nút này.",
+    "constitutional_armed_no": "Chưa được kích hoạt: lệnh tạm dừng của một người giữ sẽ không đến được nút này.",
+    "constitutional_armed_unknown": "Không rõ liệu lệnh tạm dừng của một người giữ có đến được nút này hay không: nút này không báo cáo điều đó.",
+    "constitutional_holders_count_m_unknown": "{n} người giữ accord. Nút không báo cáo cần bao nhiêu người trong số họ phải đồng ý.",
+    "chat_file_added": "{who} đã thêm {name} vào phòng",
+    "chat_file_added_you": "Bạn đã thêm {name} vào phòng",
+    "wa_identity_amendment_title": "Yêu cầu thay đổi danh tính của tác nhân này",
+    "wa_identity_base_link_title": "Neo danh tính của tác nhân này vào mẫu của nó",
+    "wa_identity_base_link_custom_note": "Tác nhân này chạy một mẫu tùy chỉnh. Hãy chấp thuận nó làm cơ sở cho danh tính của tác nhân này.",
+    "wa_identity_reapproval_title": "Chấp thuận lại một sửa đổi danh tính hiện có",
+    "wa_identity_unreadable_title": "Một thay đổi danh tính mà ứng dụng này không thể đọc",
+    "wa_identity_unreadable_note": "Ứng dụng này không thể hiển thị đầy đủ yêu cầu này, nên không thể chấp thuận ở đây. Tóm tắt và chi tiết của nó ở bên dưới. Hãy từ chối kèm theo lý do, hoặc mở nó trên một ứng dụng mới hơn.",
+    "wa_identity_reapproval_note": "Sửa đổi này có trước sự chấp thuận văn bản chính xác. Nó không được tính cho đến khi được chấp thuận lại.",
+    "wa_identity_exact_text": "Văn bản chính xác mà bạn đang chấp thuận",
+    "wa_identity_edited_by_wa": "Được chỉnh sửa bởi một Cơ Quan Sáng Suốt",
+    "wa_identity_why": "Lý do (M-1, Tính Nhất Quán Thích Ứng)",
+    "wa_identity_no_justification": "Không có lý do nào được nêu ra.",
+    "wa_identity_objection": "Lương Tâm {conscience} của tác nhân đã phản đối ({type}): {reason}",
+    "wa_identity_template_name": "Mẫu",
+    "wa_identity_template_version": "Phiên bản",
+    "wa_identity_manifest_digest": "Digest manifest",
+    "wa_identity_copy_digest": "Sao chép digest",
+    "wa_identity_guidance_optional": "Hướng dẫn (tùy chọn khi chấp thuận, bắt buộc khi từ chối)",
+    "wa_identity_reject_why": "Để từ chối, hãy nêu lý do, để tác nhân có thể đề xuất một cách diễn đạt mới",
+    "wa_identity_blocked_base_link_first": "Hãy chấp thuận liên kết cơ sở của tác nhân này trước. Cho đến khi danh tính của nó được neo vào mẫu, một thay đổi đã được chấp thuận không thể có hiệu lực.",
+    "wa_identity_blocked_outer_whitespace": "Văn bản này bắt đầu hoặc kết thúc bằng một khoảng trắng hoặc ký tự xuống dòng, điều mà tác nhân từ chối. Nó không được thay đổi ở đây, nên không thể chấp thuận. Hãy từ chối nó và yêu cầu tác nhân đề xuất lại.",
+    "wa_identity_blocked_no_digest": "Yêu cầu này không có digest mẫu đầy đủ, nên không thể chấp thuận.",
+    "wa_identity_blocked_agent_cannot_bind": "Tác nhân này không thể ràng buộc một sự chấp thuận với đúng yêu cầu này, nên không thể chấp thuận ở đây.",
+    "wa_identity_approved": "Đã chấp thuận. Các Lương Tâm của tác nhân sẽ xem xét trước khi nó có hiệu lực.",
+    "wa_identity_rejected": "Đã từ chối. Tác nhân có thể đề xuất một cách diễn đạt mới.",
+    "wa_identity_not_resolved": "Yêu cầu này chưa được giải quyết. Một Cơ Quan Sáng Suốt khác có thể đã quyết định trước.",
+    "wa_identity_failed": "Không thể gửi quyết định: {detail}",
+    "wa_identity_receipt_request": "Yêu cầu biên nhận",
+    "wa_identity_receipt_response": "Biên nhận câu trả lời của bạn",
+    "wa_identity_profile_unanchored": "Danh tính của tác nhân này chưa được neo. Hãy chấp thuận liên kết cơ sở của nó trước.",
+    "wa_identity_profile_mismatch": "Danh tính của tác nhân này không khớp với mẫu đã được chấp thuận. Không có thay đổi danh tính nào có hiệu lực cho đến khi việc đó được giải quyết.",
+    "wa_identity_profile_contested": "Danh tính của tác nhân này đang bị tranh chấp. Không có thay đổi danh tính nào có hiệu lực cho đến khi việc đó được giải quyết.",
+    "wa_identity_profile_unknown": "Tác nhân này đã báo cáo một trạng thái danh tính mà ứng dụng này không biết.",
+    "wa_identity_open_base_link": "Mở yêu cầu liên kết cơ sở"
   },
   "network": {
     "title": "Mạng",
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Chỉ người xét duyệt việc kiểm duyệt của phòng này mới có thể đưa ra phán quyết về một kháng cáo.",
     "unknown_outcome": "Một phán quyết nói rằng cờ vẫn được giữ, kháng cáo đúng một phần, hoặc cờ được gỡ bỏ.",
     "nothing_to_rule": "Không ai kháng cáo cờ của mục đó, nên không có gì để phán quyết.",
-    "appeal_failed": "Kháng cáo không thể được ký và ghi lại, nên không có gì thay đổi."
+    "appeal_failed": "Kháng cáo không thể được ký và ghi lại, nên không có gì thay đổi.",
+    "nothing_to_take_down": "Mục đó không có nội dung riêng để gỡ bỏ.",
+    "takedown_needs_reason": "Hãy nói lý do bạn gỡ bỏ mục này, bằng lời của chính bạn.",
+    "takedown_failed": "Việc gỡ bỏ không thể được ký và ghi lại, nên không có gì thay đổi."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "declared_length_mismatch": "Kích thước tệp không khớp với kích thước đã khai báo. Không có gì được ghi; hãy gửi lại.",
     "delegate_may_not_author": "người được ủy quyền không thể ghi, thay đổi hoặc rút lại một tệp: hàng dữ liệu được ký vào đồ thị như hành động của chính chủ sở hữu, và một ủy quyền dù đã kết thúc cũng không thể gỡ bỏ chữ ký đó",
     "withheld_by_moderation": "Một người kiểm duyệt của phòng này đã gắn cờ tệp này, nên tệp vẫn ẩn cho đến khi bạn chọn xem nó.",
-    "flagged_by_moderation": "một người kiểm duyệt của phòng này đã gắn cờ tệp này; tệp vẫn ở trong phòng trong khi cờ còn hiệu lực"
+    "flagged_by_moderation": "một người kiểm duyệt của phòng này đã gắn cờ tệp này; tệp vẫn ở trong phòng trong khi cờ còn hiệu lực",
+    "no_rendition": "Tệp này không có bản xem trước nào mà nút có thể tạo.",
+    "image_too_large": "Hình ảnh này quá lớn để nút tạo bản xem trước.",
+    "image_undecodable": "Nút không thể đọc hình ảnh này để tạo bản xem trước.",
+    "unknown_rendition": "Ứng dụng đã yêu cầu một loại bản xem trước mà nút không tạo."
   },
   "notes": {
     "author_signer_unavailable": "Nút này hiện không thể ký với tư cách bạn, nên ghi chú đã không được ghi lại.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Quy tắc của phòng cần thêm chữ ký trước khi thay đổi này có hiệu lực.",
     "store_unavailable": "Nút không thể đọc hoặc ghi vào thư mục của nó.",
     "write_failed": "Nút không thể ghi thay đổi.",
-    "two_people_only": "Hiện tại, một phòng chỉ chứa được hai người."
+    "two_people_only": "Hiện tại, một phòng chỉ chứa được hai người.",
+    "room_full": "Phòng này đã đầy."
   },
   "partnership_queue": {
     "title": "Hợp tác với tác nhân này",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "Chia sẻ màn hình chưa khả dụng trên nút này.",
     "leave_reason_unknown": "Đó không phải là lý do để rời khỏi cuộc gọi.",
     "video_two_people_only": "Video và chia sẻ màn hình hiện chỉ hoạt động trong cuộc gọi giữa hai người. Cuộc gọi này có nhiều người hơn, nên đây là cuộc gọi chỉ có thoại. Nếu camera của bạn đang bật, nó sẽ bắt đầu gửi lại khi cuộc gọi trở về còn hai người.",
-    "relay_canonical_audio_only": "Video của họ hiện không thể đến được với bạn: tuyến đường giữa hai bên chỉ mang âm thanh. Bạn vẫn có thể nghe thấy họ."
+    "relay_canonical_audio_only": "Video của họ hiện không thể đến được với bạn: tuyến đường giữa hai bên chỉ mang âm thanh. Bạn vẫn có thể nghe thấy họ.",
+    "share_already_live": "Bạn đang chia sẻ màn hình của mình rồi.",
+    "no_share": "Bạn không chia sẻ màn hình của mình."
   },
   "decisions": {
     "not_found": "Quyết định đó không còn mở cho bạn nữa.",
     "awaiting_members": "Câu trả lời của bạn đã được ghi lại. Các thành viên khác vẫn cần chấp thuận trước khi điều này có hiệu lực."
+  },
+  "wa": {
+    "resolve_one_subject": "Hãy chấp thuận hoặc văn bản hoặc digest mẫu, không phải cả hai.",
+    "base_link_digest_requires_approve": "Digest mẫu chỉ có thể được gửi cùng với Chấp thuận.",
+    "base_link_digest_mismatch": "Digest mẫu đó không khớp với digest mà tác nhân này đã đề xuất. Hãy làm mới và thử lại.",
+    "amendment_text_requires_approve": "Văn bản sửa đổi chỉ có thể được gửi cùng với Chấp thuận.",
+    "no_signed_request_row": "Việc hoãn này không có yêu cầu đã ký, nên không có gì để câu trả lời đã ký của bạn trả lời."
+  },
+  "deferral": {
+    "unknown_request": "Nút không biết yêu cầu của việc hoãn này."
   }
 }

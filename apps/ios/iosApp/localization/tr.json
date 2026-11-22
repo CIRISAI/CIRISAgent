@@ -4011,7 +4011,65 @@
     "call_h264_failed_load": "H.264 kodeki indirildi, ancak bu bilgisayar onu yükleyemedi. Tekrar deneyin veya H.264 görüntüyü kapatın; kapatmak kodeki siler.",
     "call_h264_needed": "Bu aramadaki biri H.264 görüntü gönderiyor. Görmek için H.264 görüntüyü açın.",
     "call_h264_licence": "Lisansı göster",
-    "call_h264_licence_hide": "Lisansı gizle"
+    "call_h264_licence_hide": "Lisansı gizle",
+    "accord_edition_unknown": "Bu düğüm hangi mesh sürümünü çalıştırdığını belirtmedi, bu nedenle sürümler arasında farklılık gösteren eylemler, bunu belirtene kadar sunulmaz.",
+    "accord_edition2_offline_ceremony": "Bu düğüm v62 mesh'ini çalıştırıyor. Güven kökü, tören aracıyla çevrimdışı oluşturulur. Bu nedenle bu uygulama, önceki mesh'in eylemlerini burada sunmaz: bir düğümü kabul etmek, bir kanonik düğümü değiştirmek, güven kökünü yeniden basmak, CI çalışanlarını kutsamak veya bir görev devretmek.",
+    "invites_seat_approve": "Katılımı onayla",
+    "invites_seat_approved": "Katılmasını onayladınız.",
+    "invites_seat_approved_of": "Onayladınız. {required} üyeden {signed}'i imzaladı.",
+    "invites_seat_declined": "Katılmasını reddettiniz.",
+    "invites_seat_waiting": "Odanın üyelerinin onun katılmasını onaylaması bekleniyor.",
+    "invites_seat_confirm_title": "{name}'in katılması onaylansın mı?",
+    "invites_seat_confirm_means": "Artık odaya katılır ve o andan itibaren odanın içeriğini okuyabilir.",
+    "invites_seat_confirm_means_quorum": "Onayınız kendi anahtarınızla imzalanır. {required} üye onayladığında katılır ve o andan itibaren odanın içeriğini okuyabilir.",
+    "invites_notice_seated": "Odaya katıldı.",
+    "invites_notice_seat_awaiting": "Onayınız kaydedildi. Diğer üyelerin hâlâ onaylaması gerekiyor.",
+    "accord_kind_confirmed": "ONAYLANMIŞ DURDURMA — YÜRÜRLÜKTEKİ DURDURMAYI ONAYLAR",
+    "accord_binding_confirmed": "onaylandı · sahiplerin kesin çoğunluğu, zaten yürürlükte olan adı geçen durdurmayı onaylar. Bu yeni bir durdurma değildir ve bir bildirim değildir.",
+    "constitutional_halt_not_halted": "Bu düğümde yürürlükte bir durdurma yok.",
+    "constitutional_halt_lone": "Bir sahip bu düğümü durdurdu. Sahiplerin kesin çoğunluğu onu onaylamadığı sürece durdurma sona erer.",
+    "constitutional_halt_lone_lapses": "Bir sahip bu düğümü durdurdu. Sahiplerin kesin çoğunluğu onu onaylamadığı sürece durdurma {time} tarihinde sona erer.",
+    "constitutional_halt_confirmed": "Sahiplerin kesin çoğunluğu bu durdurmayı onayladı. Durdurma, sahipler yeniden başlayana kadar yürürlükte kalır.",
+    "constitutional_halt_lapsed": "Yürürlükte bir durdurma yok. Son durdurma, sahiplerin çoğunluğu onu zamanında onaylamadığı için sona erdi.",
+    "constitutional_armed_yes": "Etkin: bir genesis yürürlükte, sahipleri yerleştirilmiş ve bu düğüm bu güven kökünü kabul ediyor; bu nedenle bir sahibin durdurması ona ulaşır.",
+    "constitutional_armed_no": "Etkin değil: bir sahibin durdurması bu düğüme ulaşmaz.",
+    "constitutional_armed_unknown": "Bir sahibin durdurmasının bu düğüme ulaşıp ulaşmayacağı bilinmiyor: bu düğüm bunu bildirmiyor.",
+    "constitutional_holders_count_m_unknown": "{n} anlaşma sahibi. Düğüm, kaçının aynı fikirde olması gerektiğini bildirmedi.",
+    "chat_file_added": "{who}, {name} öğesini odaya ekledi",
+    "chat_file_added_you": "{name} öğesini odaya eklediniz",
+    "wa_identity_amendment_title": "Bu ajanın kimliğini değiştirme talebi",
+    "wa_identity_base_link_title": "Bu ajanın kimliğini şablonuna sabitle",
+    "wa_identity_base_link_custom_note": "Bu ajan özel bir şablon çalıştırıyor. Bunu ajanın kimliğinin temeli olarak onaylayın.",
+    "wa_identity_reapproval_title": "Mevcut bir kimlik değişikliğini yeniden onaylama",
+    "wa_identity_unreadable_title": "Bu uygulamanın okuyamadığı bir kimlik değişikliği",
+    "wa_identity_unreadable_note": "Bu uygulama bu isteği tam olarak gösteremiyor, bu yüzden burada onaylanamaz. Özeti ve ayrıntıları aşağıdadır. Bir nedenle reddedin veya daha yeni bir uygulamada açın.",
+    "wa_identity_reapproval_note": "Bu değişiklik, tam metin onayından önce yapılmış. Yeniden onaylanana kadar geçerli sayılmaz.",
+    "wa_identity_exact_text": "Onayladığınız tam metin",
+    "wa_identity_edited_by_wa": "Bir Bilge Otorite tarafından düzenlendi",
+    "wa_identity_why": "Neden (M-1, Uyarlanabilir Tutarlılık)",
+    "wa_identity_no_justification": "Hiçbir gerekçe belirtilmedi.",
+    "wa_identity_objection": "Ajanın {conscience} vicdanı itiraz etti ({type}): {reason}",
+    "wa_identity_template_name": "Şablon",
+    "wa_identity_template_version": "Sürüm",
+    "wa_identity_manifest_digest": "Manifest özeti",
+    "wa_identity_copy_digest": "Özeti kopyala",
+    "wa_identity_guidance_optional": "Rehberlik (onaylamak için isteğe bağlı, reddetmek için gerekli)",
+    "wa_identity_reject_why": "Reddetmek için nedenini belirtin, böylece ajan yeni bir ifade önerebilir",
+    "wa_identity_blocked_base_link_first": "Önce bu ajanın temel bağlantısını onaylayın. Kimliği şablonuna sabitlenene kadar, onaylanmış bir değişiklik uygulanamaz.",
+    "wa_identity_blocked_outer_whitespace": "Bu metin bir boşluk veya satır sonuyla başlıyor ya da bitiyor; ajan bunu reddediyor. Burada değiştirilmiyor, bu yüzden onaylanamaz. Reddedin ve ajandan yeniden önermesini isteyin.",
+    "wa_identity_blocked_no_digest": "Bu istekte eksiksiz bir şablon özeti yok, bu yüzden onaylanamaz.",
+    "wa_identity_blocked_agent_cannot_bind": "Bu ajan bir onayı bu tam isteğe bağlayamıyor, bu yüzden burada onaylanamaz.",
+    "wa_identity_approved": "Onaylandı. Ajanın vicdanları, uygulanmadan önce bunu inceler.",
+    "wa_identity_rejected": "Reddedildi. Ajan yeni bir ifade önerebilir.",
+    "wa_identity_not_resolved": "Bu istek çözümlenmedi. Başka bir Bilge Otorite onu önce karara bağlamış olabilir.",
+    "wa_identity_failed": "Karar gönderilemedi: {detail}",
+    "wa_identity_receipt_request": "İstek makbuzu",
+    "wa_identity_receipt_response": "Yanıtınızın makbuzu",
+    "wa_identity_profile_unanchored": "Bu ajanın kimliği henüz sabitlenmedi. Önce temel bağlantısını onaylayın.",
+    "wa_identity_profile_mismatch": "Bu ajanın kimliği, onaylanmış şablonuyla eşleşmiyor. Bu çözülene kadar hiçbir kimlik değişikliği uygulanmaz.",
+    "wa_identity_profile_contested": "Bu ajanın kimliği tartışmalı. Bu çözülene kadar hiçbir kimlik değişikliği uygulanmaz.",
+    "wa_identity_profile_unknown": "Bu ajan, bu uygulamanın bilmediği bir kimlik durumu bildirdi.",
+    "wa_identity_open_base_link": "Temel bağlantı isteğini aç"
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Yalnızca bu odanın moderasyonunu inceleyen biri bir itiraz hakkında karar verebilir.",
     "unknown_outcome": "Bir karar; işaretin kaldığını, itirazın kısmen haklı olduğunu veya işaretin kaldırıldığını belirtir.",
     "nothing_to_rule": "Hiç kimse bu öğenin işaretine itiraz etmemiş, bu nedenle karar verilecek bir şey yok.",
-    "appeal_failed": "İtiraz imzalanıp kaydedilemedi, bu nedenle hiçbir şey değişmedi."
+    "appeal_failed": "İtiraz imzalanıp kaydedilemedi, bu nedenle hiçbir şey değişmedi.",
+    "nothing_to_take_down": "Bu öğenin kaldırılacak ayrı bir içeriği yok.",
+    "takedown_needs_reason": "Bunu neden kaldırdığınızı kendi sözlerinizle belirtin.",
+    "takedown_failed": "Kaldırma işlemi imzalanıp kaydedilemedi, bu nedenle hiçbir şey değişmedi."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "range_not_satisfiable": "İstenen aralık bu dosyanın dışında.",
     "same_room": "dosya zaten o odada — taşımak için farklı bir oda gerekir",
     "withheld_by_moderation": "Bu odanın bir moderatörü bu dosyayı işaretledi, bu nedenle siz görmeyi seçene kadar gizli kalır.",
-    "flagged_by_moderation": "bu odanın bir moderatörü bu dosyayı işaretledi; işaret geçerli olduğu sürece dosya odada kalır"
+    "flagged_by_moderation": "bu odanın bir moderatörü bu dosyayı işaretledi; işaret geçerli olduğu sürece dosya odada kalır",
+    "no_rendition": "Bu dosya için düğümün oluşturabileceği bir önizleme yok.",
+    "image_too_large": "Bu görsel, düğümün önizleme oluşturamayacağı kadar büyük.",
+    "image_undecodable": "Düğüm, önizleme oluşturmak için bu görseli okuyamadı.",
+    "unknown_rendition": "Uygulama, düğümün oluşturmadığı bir tür önizleme istedi."
   },
   "notes": {
     "author_signer_unavailable": "Bu düğüm şu anda sizin adınıza imza atamıyor, bu nedenle not yazılmadı.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Bu değişikliğin yürürlüğe girmesi için odanın kuralı daha fazla imza gerektiriyor.",
     "store_unavailable": "Düğüm, dizinini okuyamadı veya yazamadı.",
     "write_failed": "Düğüm, değişikliği yazamadı.",
-    "two_people_only": "Bir oda şimdilik iki kişiyi barındırır."
+    "two_people_only": "Bir oda şimdilik iki kişiyi barındırır.",
+    "room_full": "Bu oda dolu."
   },
   "partnership_queue": {
     "admin_only": "Bu ajanı kimlerin beklediğini yalnızca yöneticileri görebilir.",
@@ -6603,10 +6669,22 @@
     "not_joined": "Önce aramaya katılın.",
     "bad_layer_policy": "Bu kalite ayarı, bu cihazın anladığı bir ayar değil.",
     "cross_origin": "Bu arama yalnızca bu cihazın kendi sayfasından açılabilir.",
-    "socket_already_open": "Bu arama için zaten açık bir akış bağlantısı var."
+    "socket_already_open": "Bu arama için zaten açık bir akış bağlantısı var.",
+    "share_already_live": "Ekranınızı zaten paylaşıyorsunuz.",
+    "no_share": "Ekranınızı paylaşmıyorsunuz."
   },
   "decisions": {
     "not_found": "Bu karar artık sizin için açık değil.",
     "awaiting_members": "Yanıtınız kaydedildi. Bunun yürürlüğe girmesi için diğer üyelerin hâlâ onaylaması gerekiyor."
+  },
+  "wa": {
+    "resolve_one_subject": "Ya metni ya da şablon özetini onaylayın, ikisini birden değil.",
+    "base_link_digest_requires_approve": "Bir şablon özeti yalnızca Onayla ile gönderilebilir.",
+    "base_link_digest_mismatch": "Bu şablon özeti, ajanın önerdiğiyle eşleşmiyor. Yenileyin ve tekrar deneyin.",
+    "amendment_text_requires_approve": "Değişiklik metni yalnızca Onayla ile gönderilebilir.",
+    "no_signed_request_row": "Bu ertelemenin imzalı bir isteği yok, bu yüzden imzalı yanıtınızın karşılık vereceği bir şey yok."
+  },
+  "deferral": {
+    "unknown_request": "Düğüm bu erteleme isteğini bilmiyor."
   }
 }

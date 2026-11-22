@@ -4011,7 +4011,65 @@
     "moderation_clear_flag": "ምልክቱን አጽዳ",
     "moderation_flag_title": "ይህን ነገር ለክፍሉ ይፈርጅ?",
     "call_joining": "ጥሪውን በመቀላቀል ላይ…",
-    "call_audio_unavailable_here": "የጥሪ ድምፅ ለዚህ መሣሪያ ገና አልተዘጋጀም፤ ስለዚህ እዚህ ሌሎችን አይሰሙም፣ እርስዎም አይሰሙም።"
+    "call_audio_unavailable_here": "የጥሪ ድምፅ ለዚህ መሣሪያ ገና አልተዘጋጀም፤ ስለዚህ እዚህ ሌሎችን አይሰሙም፣ እርስዎም አይሰሙም።",
+    "wa_identity_amendment_title": "የዚህን ወኪል ማንነት ለመቀየር ጥያቄ",
+    "wa_identity_base_link_title": "የዚህን ወኪል ማንነት ከአብነቱ ጋር አስተሳስር",
+    "wa_identity_base_link_custom_note": "ይህ ወኪል ብጁ አብነት ይጠቀማል። ይህንን እንደ ወኪሉ ማንነት መሠረት አድርገው ያጽድቁት።",
+    "wa_identity_reapproval_title": "ነባር የማንነት ማሻሻያ እንደገና አጽድቅ",
+    "wa_identity_unreadable_title": "ይህ መተግበሪያ ሊያነበው የማይችል የማንነት ለውጥ",
+    "wa_identity_unreadable_note": "ይህ መተግበሪያ ይህን ጥያቄ ሙሉ በሙሉ ማሳየት አይችልም፣ ስለዚህ እዚህ ሊጸድቅ አይችልም። ማጠቃለያውና ዝርዝሮቹ ከታች ይገኛሉ። ከምክንያት ጋር ውድቅ ያድርጉት፣ ወይም በአዲስ መተግበሪያ ይክፈቱት።",
+    "wa_identity_reapproval_note": "ይህ ማሻሻያ ከትክክለኛ-ጽሑፍ ማጽደቅ ቀደም ብሎ የተደረገ ነው። እንደገና እስኪጸድቅ ድረስ አይቆጠርም።",
+    "wa_identity_exact_text": "እርስዎ የሚያጸድቁት ትክክለኛ ጽሑፍ",
+    "wa_identity_edited_by_wa": "በየጥበብ ባለስልጣን የተስተካከለ",
+    "wa_identity_why": "ለምን (M-1፣ ተለዋዋጭ ተቀናጀነት)",
+    "wa_identity_no_justification": "ምንም ምክንያት አልተገለጸም።",
+    "wa_identity_objection": "የወኪሉ {conscience} ህሊና ተቃውሟል ({type})፦ {reason}",
+    "wa_identity_template_name": "አብነት",
+    "wa_identity_template_version": "ስሪት",
+    "wa_identity_manifest_digest": "የማኒፌስት ዳይጀስት",
+    "wa_identity_copy_digest": "ዳይጀስት ቅዳ",
+    "wa_identity_guidance_optional": "መመሪያ (ለማጽደቅ አማራጭ፣ ለውድቅ ማድረግ አስፈላጊ)",
+    "wa_identity_reject_why": "ውድቅ ለማድረግ፣ ወኪሉ አዲስ አቀራረብ እንዲያቀርብ ምክንያቱን ይግለጹ",
+    "wa_identity_blocked_base_link_first": "መጀመሪያ የዚህን ወኪል መሠረታዊ ትስስር ያጽድቁ። ማንነቱ ከአብነቱ ጋር እስኪታሰር ድረስ፣ የጸደቀ ለውጥ ሊተገበር አይችልም።",
+    "wa_identity_blocked_outer_whitespace": "ይህ ጽሑፍ በባዶ ቦታ ወይም በመስመር መቁረጫ ይጀምራል ወይም ይጨርሳል፣ ይህንም ወኪሉ ይቃወማል። እዚህ አልተቀየረም፣ ስለዚህ ሊጸድቅ አይችልም። ውድቅ ያድርጉት እና ወኪሉ እንደገና እንዲያቀርበው ይጠይቁት።",
+    "wa_identity_blocked_no_digest": "ይህ ጥያቄ ሙሉ የአብነት ዳይጀስት የለውም፣ ስለዚህ ሊጸድቅ አይችልም።",
+    "wa_identity_blocked_agent_cannot_bind": "ይህ ወኪል ለዚህ ትክክለኛ ጥያቄ ማጽደቅን ማስተሳሰር አይችልም፣ ስለዚህ እዚህ ሊጸድቅ አይችልም።",
+    "wa_identity_approved": "ጸድቋል። ከመተግበሩ በፊት የወኪሉ ህሊናዎች ይገመግሙታል።",
+    "wa_identity_rejected": "ውድቅ ተደርጓል። ወኪሉ አዲስ አቀራረብ ሊያቀርብ ይችላል።",
+    "wa_identity_not_resolved": "ይህ ጥያቄ አልተፈታም። ሌላ የጥበብ ባለስልጣን ቀድሞ ወስኖ ሊሆን ይችላል።",
+    "wa_identity_failed": "ውሳኔው ሊላክ አልቻለም፦ {detail}",
+    "wa_identity_receipt_request": "ደረሰኝ ጠይቅ",
+    "wa_identity_receipt_response": "የመልስዎ ደረሰኝ",
+    "wa_identity_profile_unanchored": "የዚህ ወኪል ማንነት ገና አልታሰረም። መጀመሪያ መሠረታዊ ትስስሩን ያጽድቁ።",
+    "wa_identity_profile_mismatch": "የዚህ ወኪል ማንነት ከጸደቀው አብነቱ ጋር አይዛመድም። ይህ እስኪፈታ ድረስ ምንም የማንነት ለውጥ አይተገበርም።",
+    "wa_identity_profile_contested": "የዚህ ወኪል ማንነት ክርክር ላይ ውሏል። ይህ እስኪፈታ ድረስ ምንም የማንነት ለውጥ አይተገበርም።",
+    "wa_identity_profile_unknown": "ይህ ወኪል ይህ መተግበሪያ የማያውቀውን የማንነት ሁኔታ ዘግቧል።",
+    "wa_identity_open_base_link": "የመሠረታዊ-ትስስር ጥያቄን ክፈት",
+    "invites_notice_seat_awaiting": "ማጽደቅዎ ተመዝግቧል። ሌሎች አባላት አሁንም ማጽደቅ አለባቸው።",
+    "invites_seat_declined": "እነሱ እንዲቀላቀሉ አልተቀበሉም።",
+    "invites_seat_waiting": "የክፍሉ አባላት እነሱ እንዲቀላቀሉ እንዲያጸድቁ በመጠበቅ ላይ።",
+    "invites_seat_confirm_title": "{name} መቀላቀልን ያጽድቁ?",
+    "invites_seat_confirm_means": "እነሱ አሁን ክፍሉን ይቀላቀላሉ እና ከዚያ በኋላ የያዘውን ማንበብ ይችላሉ።",
+    "invites_seat_confirm_means_quorum": "ማጽደቅዎ በቁልፍዎ ይፈረማል። {required} አባላት ካጸደቁ በኋላ ይቀላቀላሉ፣ እና ከዚያ በኋላ ክፍሉ የያዘውን ማንበብ ይችላሉ።",
+    "accord_edition2_offline_ceremony": "ይህ ኖድ የv62 ሜሽን ያስኬዳል። የመተማመኛ ሥሩ ከመስመር ውጭ፣ በሥነ-ሥርዓት መሳሪያው ይፈጠራል። በዚህ ምክንያት ይህ መተግበሪያ የቀደመውን ሜሽ ተግባራት እዚህ አያቀርብም፦ ኖድ መቀበል፣ ቀኖናዊ ኖድ መቀየር፣ የመተማመኛ ሥርን እንደገና ማውጣት፣ የCI ሠራተኞችን መባረክ፣ ወይም ግዴታ ማስረከብ።",
+    "accord_edition_unknown": "ይህ ኖድ የትኛውን የሜሽ እትም እንደሚያስኬድ አልገለጸም፤ ስለዚህ በእትሞች መካከል የሚለያዩ ተግባራት እስኪገልጽ ድረስ አይቀርቡም።",
+    "invites_seat_approve": "መቀላቀልን ያጽድቁ",
+    "invites_notice_seated": "አሁን ተቀላቅለዋል።",
+    "invites_seat_approved": "እርስዎ እንዲቀላቀሉ አጽድቀዋል።",
+    "invites_seat_approved_of": "እርስዎ አጽድቀዋል። ከ{required} አባላት ውስጥ {signed} ፈርመዋል።",
+    "chat_file_added": "{who} {name}ን ወደ ክፍሉ ጨምረዋል",
+    "chat_file_added_you": "እርስዎ {name}ን ወደ ክፍሉ ጨምረዋል",
+    "constitutional_halt_not_halted": "በዚህ ኖድ ላይ ምንም ማቆም በሥራ ላይ የለም።",
+    "constitutional_halt_lone": "አንድ ያዥ ይህን ኖድ አቁሟል። የያዦቹ ከግማሽ በላይ ካላረጋገጠው በስተቀር ማቆሙ ያበቃል።",
+    "constitutional_halt_lone_lapses": "አንድ ያዥ ይህን ኖድ አቁሟል። የያዦቹ ከግማሽ በላይ ካላረጋገጠው በስተቀር ማቆሙ በ{time} ያበቃል።",
+    "constitutional_halt_confirmed": "የያዦቹ ከግማሽ በላይ ይህን ማቆም አረጋግጠዋል። ያዦቹ ወደ ሥራ እስኪመለሱ ድረስ በሥራ ላይ ይቆያል።",
+    "constitutional_halt_lapsed": "ምንም ማቆም በሥራ ላይ የለም። የመጨረሻው ማቆም አብቅቷል፣ ምክንያቱም የያዦቹ አብላጫ በወቅቱ ስላላረጋገጠው።",
+    "constitutional_armed_yes": "ታጥቋል፦ ጀነሲስ በሥራ ላይ ነው፣ ያዦቹ ተቀምጠዋል፣ እና ይህ ኖድ ያንን የመተማመኛ ሥር ይቀበላል፣ ስለዚህ የያዥ ማቆም ይደርሰዋል።",
+    "constitutional_armed_no": "አልታጠቀም፦ የያዥ ማቆም ወደዚህ ኖድ አይደርስም።",
+    "constitutional_armed_unknown": "የያዥ ማቆም ወደዚህ ኖድ እንደሚደርስ አይታወቅም፦ ይህ ኖድ ይህንን አያሳውቅም።",
+    "constitutional_holders_count_m_unknown": "{n} የስምምነት ያዥ(ዎች)። ኖዱ ስንት መስማማት እንዳለባቸው አልዘገበም።",
+    "accord_kind_confirmed": "የተረጋገጠ ማቆም — በሥራ ላይ ያለውን ማቆም ያረጋግጣል",
+    "accord_binding_confirmed": "ተረጋግጧል · የያዦቹ ከግማሽ በላይ አስቀድሞ በሥራ ላይ ያለውን የተጠቀሰውን ማቆም ያረጋግጣሉ። ይህ አዲስ ማቆም አይደለም እና ማስታወቂያም አይደለም።"
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "የዚህ ክፍል ቁጥጥርን የሚገመግም ሰው ብቻ በይግባኝ ላይ ውሳኔ መስጠት ይችላል።",
     "unknown_outcome": "ውሳኔ ምልክቱ እንደሚቆይ፣ ይግባኙ በከፊል ትክክል እንደሆነ፣ ወይም ምልክቱ እንደሚነሳ ይገልጻል።",
     "nothing_to_rule": "ማንም የዚያን ነገር ምልክት ይግባኝ አላለም፣ ስለዚህ የሚወሰንበት ነገር የለም።",
-    "appeal_failed": "ይግባኙ ሊፈረም እና ሊመዘገብ አልቻለም፣ ስለዚህ ምንም አልተቀየረም።"
+    "appeal_failed": "ይግባኙ ሊፈረም እና ሊመዘገብ አልቻለም፣ ስለዚህ ምንም አልተቀየረም።",
+    "nothing_to_take_down": "ያ ነገር የሚወርድ የተለየ ይዘት የለውም።",
+    "takedown_needs_reason": "ይህን ለምን እያወረዱት እንደሆነ በራስዎ ቃላት ይግለጹ።",
+    "takedown_failed": "ውርዱ ሊፈረም እና ሊመዘገብ አልቻለም፣ ስለዚህ ምንም አልተቀየረም።"
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "withdrawn": "ጸሐፊው ይህን ፋይል አስወግዶታል። ባይቶቹ ከእንግዲህ የትም አይቀርቡም።",
     "awaiting_key": "ባይቶቹ እዚህ አሉ፣ ነገር ግን የዚህ መሣሪያ ቁልፍ ለእነሱ እስካሁን አልደረሰም። በራሱ ይከተላል፤ ትንሽ ቆይተው እንደገና ይሞክሩ።",
     "withheld_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፣ ስለዚህ እስኪመርጡ ድረስ ተደብቆ ይቆያል።",
-    "flagged_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፤ ምልክቱ እስካለ ድረስ ፋይሉ በክፍሉ ውስጥ ይቆያል"
+    "flagged_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፤ ምልክቱ እስካለ ድረስ ፋይሉ በክፍሉ ውስጥ ይቆያል",
+    "no_rendition": "ይህ ፋይል ኖዱ ሊያዘጋጀው የሚችለው ቅድመ-እይታ የለውም።",
+    "image_too_large": "ይህ ምስል ኖዱ ቅድመ-እይታ ለማዘጋጀት በጣም ትልቅ ነው።",
+    "image_undecodable": "ኖዱ ቅድመ-እይታ ለማዘጋጀት ይህን ምስል ማንበብ አልቻለም።",
+    "unknown_rendition": "መተግበሪያው ኖዱ የማያዘጋጀው ዓይነት ቅድመ-እይታ ጠየቀ።"
   },
   "notes": {
     "author_signer_unavailable": "ይህ ኖድ አሁን እንደ እርስዎ መፈረም አይችልም፣ ስለዚህ ማስታወሻው አልተጻፈም።",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "ይህ ለውጥ ሥራ ላይ ከመዋሉ በፊት የክፍሉ ሕግ ተጨማሪ ፊርማዎችን ይፈልጋል።",
     "store_unavailable": "ኖዱ ማውጫውን ማንበብ ወይም መጻፍ አልቻለም።",
     "write_failed": "ኖዱ ለውጡን መጻፍ አልቻለም።",
-    "two_people_only": "ክፍል ለአሁኑ ሁለት ሰዎችን ብቻ ይይዛል።"
+    "two_people_only": "ክፍል ለአሁኑ ሁለት ሰዎችን ብቻ ይይዛል።",
+    "room_full": "ይህ ክፍል ሞልቷል።"
   },
   "partnership_queue": {
     "title": "ከዚህ ወኪል ጋር መተባበር",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "ማያ ገጽዎን ማጋራት በዚህ ኖድ ላይ እስካሁን አይገኝም።",
     "leave_reason_unknown": "ያ ጥሪን ለመልቀቅ ምክንያት አይደለም።",
     "video_two_people_only": "ቪዲዮ እና የማያ ገጽ መጋራት ለአሁኑ በሁለት ሰዎች መካከል በሚደረጉ ጥሪዎች ውስጥ ይሰራሉ። ይህ ጥሪ ከዚያ በላይ ተሳታፊዎች አሉት፣ ስለዚህ የድምፅ ብቻ ነው። ካሜራዎ በርቶ ከሆነ፣ ጥሪው ወደ ሁለት ተሳታፊዎች ሲመለስ እንደገና መላክ ይጀምራል።",
-    "relay_canonical_audio_only": "ቪዲዮአቸው አሁን ሊደርስዎት አይችልም፦ በእርስዎ እና በእነሱ መካከል ያለው መንገድ ድምጽ ብቻ ይይዛል። አሁንም ሊሰሟቸው ይችላሉ።"
+    "relay_canonical_audio_only": "ቪዲዮአቸው አሁን ሊደርስዎት አይችልም፦ በእርስዎ እና በእነሱ መካከል ያለው መንገድ ድምጽ ብቻ ይይዛል። አሁንም ሊሰሟቸው ይችላሉ።",
+    "share_already_live": "ማያ ገጽዎን አስቀድመው በማጋራት ላይ ነዎት።",
+    "no_share": "ማያ ገጽዎን በማጋራት ላይ አይደሉም።"
   },
   "decisions": {
     "not_found": "ያ ውሳኔ ለእርስዎ ከዚህ በኋላ ክፍት አይደለም።",
     "awaiting_members": "መልስዎ ተመዝግቧል። ይህ ተግባራዊ ከመሆኑ በፊት ሌሎች አባላት ማጽደቅ አለባቸው።"
+  },
+  "wa": {
+    "resolve_one_subject": "ጽሑፉን ወይም የአብነት ዳይጀስቱን ያጽድቁ፣ ሁለቱንም አይደለም።",
+    "base_link_digest_requires_approve": "የአብነት ዳይጀስት ከማጽደቅ ጋር ብቻ ሊላክ ይችላል።",
+    "base_link_digest_mismatch": "ያ የአብነት ዳይጀስት ይህ ወኪል ካቀረበው ጋር አይዛመድም። ያድሱ እና እንደገና ይሞክሩ።",
+    "amendment_text_requires_approve": "የማሻሻያ ጽሑፍ ከማጽደቅ ጋር ብቻ ሊላክ ይችላል።",
+    "no_signed_request_row": "ይህ ማዘግየት የተፈረመ ጥያቄ የለውም፣ ስለዚህ የተፈረመ መልስዎ የሚመልሰው ምንም ነገር የለም።"
+  },
+  "deferral": {
+    "unknown_request": "ኖዱ የዚህን ማዘግየት ጥያቄ አያውቅም።"
   }
 }

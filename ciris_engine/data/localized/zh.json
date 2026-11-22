@@ -4011,7 +4011,65 @@
     "call_h264_failed_load": "H.264 编解码器已下载，但此电脑无法加载它。请重试，或关闭 H.264 视频，这会将编解码器删除。",
     "call_h264_needed": "此次通话中有人正在发送 H.264 视频。请开启 H.264 视频以查看。",
     "call_h264_licence": "显示许可证",
-    "call_h264_licence_hide": "隐藏许可证"
+    "call_h264_licence_hide": "隐藏许可证",
+    "accord_edition2_offline_ceremony": "此节点运行 v62 网格。其信任根通过仪式工具离线创建。因此，本应用在此不提供早期网格的以下操作：准入节点、更改规范节点、重铸信任根、核准 CI 工作节点，或授予职责。",
+    "accord_edition_unknown": "此节点尚未说明其运行的网格版本，因此在它说明之前，各版本之间存在差异的操作将不予提供。",
+    "invites_seat_approve": "批准加入",
+    "invites_seat_approved": "您已批准对方加入。",
+    "invites_seat_approved_of": "您已批准。{required} 名成员中已有 {signed} 位签名。",
+    "invites_seat_declined": "您已拒绝对方加入。",
+    "invites_seat_waiting": "正在等待聊天室成员批准对方加入。",
+    "invites_seat_confirm_title": "批准 {name} 加入？",
+    "invites_seat_confirm_means": "对方将立即加入聊天室，此后可以读取其中的内容。",
+    "invites_seat_confirm_means_quorum": "您的批准将用您的密钥签名。一旦有 {required} 名成员批准，对方即可加入，此后可以读取聊天室中的内容。",
+    "invites_notice_seated": "对方已加入聊天室。",
+    "invites_notice_seat_awaiting": "您的批准已记录。其他成员仍需批准。",
+    "accord_kind_confirmed": "已确认的停机 — 确认当前生效的停机",
+    "accord_binding_confirmed": "已确认 · 持有者中的严格多数确认了已生效的指定停机。这不是新的停机，也不是通知。",
+    "constitutional_halt_not_halted": "此节点当前没有生效中的停机。",
+    "constitutional_halt_lone": "一位持有者已使此节点停机。除非持有者中的严格多数予以确认，否则此次停机将失效。",
+    "constitutional_halt_lone_lapses": "一位持有者已使此节点停机。除非持有者中的严格多数予以确认，否则此次停机将于{time}失效。",
+    "constitutional_halt_confirmed": "持有者中的严格多数已确认此次停机。该停机将持续生效，直至持有者恢复运行为止。",
+    "constitutional_halt_lapsed": "当前没有生效中的停机。上一次停机已失效，因为持有者未能在规定时间内达成多数确认。",
+    "constitutional_armed_yes": "已启用：创世已生效，其持有者已就位，且此节点接受该信任根，因此持有者发起的停机能够到达此节点。",
+    "constitutional_armed_no": "未启用：持有者发起的停机不会到达此节点。",
+    "constitutional_armed_unknown": "持有者发起的停机是否会到达此节点尚不清楚：此节点未报告该信息。",
+    "constitutional_holders_count_m_unknown": "{n}位协约持有者。该节点未报告其中需要多少人达成一致。",
+    "chat_file_added": "{who} 将 {name} 添加到了聊天室",
+    "chat_file_added_you": "您将 {name} 添加到了聊天室",
+    "wa_identity_amendment_title": "请求更改此智能体的身份",
+    "wa_identity_base_link_title": "将此智能体的身份锚定到其模板",
+    "wa_identity_base_link_custom_note": "此智能体运行自定义模板。请批准将其作为此智能体身份的基础。",
+    "wa_identity_reapproval_title": "重新批准现有的身份修订",
+    "wa_identity_unreadable_title": "本应用无法读取的身份更改",
+    "wa_identity_unreadable_note": "本应用无法完整显示此请求，因此无法在此处批准。其摘要和详情见下方。请附上理由拒绝它，或在更新版本的应用中打开它。",
+    "wa_identity_reapproval_note": "此修订早于确切文本批准制度。在重新获得批准之前，它不具有效力。",
+    "wa_identity_exact_text": "您正在批准的确切文本",
+    "wa_identity_edited_by_wa": "由智慧权威编辑",
+    "wa_identity_why": "理由（M-1，自适应连贯性）",
+    "wa_identity_no_justification": "未说明理由。",
+    "wa_identity_objection": "智能体的 {conscience} 良知提出了异议（{type}）：{reason}",
+    "wa_identity_template_name": "模板",
+    "wa_identity_template_version": "版本",
+    "wa_identity_manifest_digest": "清单摘要",
+    "wa_identity_copy_digest": "复制摘要",
+    "wa_identity_guidance_optional": "指导意见（批准时可选，拒绝时必填）",
+    "wa_identity_reject_why": "如需拒绝，请说明理由，以便智能体提出新的表述",
+    "wa_identity_blocked_base_link_first": "请先批准此智能体的基础链接。在其身份锚定到模板之前，已批准的更改无法生效。",
+    "wa_identity_blocked_outer_whitespace": "此文本的开头或结尾含有空格或换行，而智能体会拒绝这种情况。此处不会对其进行更改，因此无法批准。请拒绝它，并要求智能体重新提出。",
+    "wa_identity_blocked_no_digest": "此请求没有完整的模板摘要，因此无法批准。",
+    "wa_identity_blocked_agent_cannot_bind": "此智能体无法将批准绑定到这一确切请求，因此无法在此处批准。",
+    "wa_identity_approved": "已批准。此智能体的各项良知将在其生效前对其进行审查。",
+    "wa_identity_rejected": "已拒绝。智能体可以提出新的表述。",
+    "wa_identity_not_resolved": "此请求尚未解决。可能已有另一位智慧权威先行做出决定。",
+    "wa_identity_failed": "无法发送该决定：{detail}",
+    "wa_identity_receipt_request": "请求回执",
+    "wa_identity_receipt_response": "您的回答的回执",
+    "wa_identity_profile_unanchored": "此智能体的身份尚未锚定。请先批准其基础链接。",
+    "wa_identity_profile_mismatch": "此智能体的身份与其已批准的模板不匹配。在此问题解决之前，任何身份更改均不会生效。",
+    "wa_identity_profile_contested": "此智能体的身份存在争议。在争议解决之前，任何身份更改均不会生效。",
+    "wa_identity_profile_unknown": "此智能体报告了一个本应用无法识别的身份状态。",
+    "wa_identity_open_base_link": "打开基础链接请求"
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "只有负责审核此房间管理工作的人员，才能对申诉作出裁定。",
     "unknown_outcome": "裁定结果为：标记保持有效、申诉部分成立，或标记已解除。",
     "nothing_to_rule": "没有人对该项内容的标记提出申诉，因此没有可裁定的内容。",
-    "appeal_failed": "无法对该申诉进行签名和记录，因此未发生任何更改。"
+    "appeal_failed": "无法对该申诉进行签名和记录，因此未发生任何更改。",
+    "nothing_to_take_down": "该项内容没有可单独撤下的内容。",
+    "takedown_needs_reason": "请用您自己的话说明为何要撤下此内容。",
+    "takedown_failed": "无法对该下架操作进行签名和记录，因此未发生任何更改。"
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "withdrawn": "其作者已撤回此文件。这些字节已不再在任何地方提供。",
     "awaiting_key": "其字节已在此，但本设备用于解密它们的密钥尚未到达。它会自行送达；请稍后重试。",
     "withheld_by_moderation": "此房间的管理员标记了此文件，因此在您选择查看之前，它将保持隐藏。",
-    "flagged_by_moderation": "此房间的管理员标记了此文件；在标记有效期间，它仍保留在房间中"
+    "flagged_by_moderation": "此房间的管理员标记了此文件；在标记有效期间，它仍保留在房间中",
+    "no_rendition": "此文件没有节点可生成的预览。",
+    "image_too_large": "此图片过大，节点无法生成预览。",
+    "image_undecodable": "节点无法读取此图片以生成预览。",
+    "unknown_rendition": "应用请求了一种节点无法生成的预览类型。"
   },
   "notes": {
     "author_signer_unavailable": "此节点当前无法以您的身份签名，因此笔记未能写入。",
@@ -6424,7 +6489,8 @@
     "store_unavailable": "本节点无法读取或写入其目录。",
     "write_failed": "本节点无法写入此更改。",
     "pair_room_fixed": "两人之间的聊天无法更改成员。请创建一个聊天室与更多人交谈。",
-    "two_people_only": "聊天室目前仅支持两人。"
+    "two_people_only": "聊天室目前仅支持两人。",
+    "room_full": "此聊天室已满。"
   },
   "partnership_queue": {
     "title": "与此智能体建立合作关系",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "此节点尚不支持屏幕共享功能。",
     "leave_reason_unknown": "这不是离开通话的有效原因。",
     "video_two_people_only": "目前，视频和屏幕共享仅支持双人通话。此次通话人数更多，因此仅支持语音。如果您的摄像头已开启，当通话恢复为双人时，它会重新开始发送画面。",
-    "relay_canonical_audio_only": "对方的视频目前无法传送到您这里：您与对方之间的路由仅支持传输声音。您仍然可以听到对方的声音。"
+    "relay_canonical_audio_only": "对方的视频目前无法传送到您这里：您与对方之间的路由仅支持传输声音。您仍然可以听到对方的声音。",
+    "share_already_live": "您已经在共享屏幕了。",
+    "no_share": "您当前没有共享屏幕。"
   },
   "decisions": {
     "not_found": "该决定对您已不再开放。",
     "awaiting_members": "您的回答已记录。在此更改生效前，其他成员仍需批准。"
+  },
+  "wa": {
+    "resolve_one_subject": "请只批准文本或模板摘要中的一项，不能两者都批准。",
+    "base_link_digest_requires_approve": "模板摘要只能随“批准”一起发送。",
+    "base_link_digest_mismatch": "该模板摘要与此智能体提出的不一致。请刷新后重试。",
+    "amendment_text_requires_approve": "修订文本只能随“批准”一起发送。",
+    "no_signed_request_row": "此延迟没有已签名的请求，因此您的已签名回答没有可回应的对象。"
+  },
+  "deferral": {
+    "unknown_request": "此节点不知道此延迟的请求。"
   }
 }

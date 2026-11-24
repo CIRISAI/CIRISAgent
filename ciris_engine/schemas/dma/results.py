@@ -12,11 +12,12 @@ using convert_llm_result_to_action_result().
 """
 
 import logging
+import math
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
 from ciris_engine.schemas.types import JSONDict
 
 from ..actions.parameters import (
@@ -108,6 +109,33 @@ def _coerce_to_string(v: Any) -> str:
     return str(v)
 
 
+def _clamp_unit_float(v: Any) -> Any:
+    """Clamp finite numeric scores to [0.0, 1.0] (CIRISAgent#894).
+
+    Grammar backends cannot enforce numeric ``ge``/``le`` bounds, so local
+    models occasionally emit values slightly outside ``[0, 1]`` (e.g. ``1.3``
+    or ``-0.1``). Clamping preserves the model's directional intent instead of
+    triggering a hard validation failure. Non-numeric, boolean, and non-finite
+    values (NaN/Inf) are passed through so Pydantic still rejects malformed
+    outputs.
+    """
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        if not math.isfinite(v):
+            return v
+        return max(0.0, min(1.0, float(v)))
+    if isinstance(v, str):
+        try:
+            parsed = float(v)
+        except ValueError:
+            return v
+        if not math.isfinite(parsed):
+            return v
+        return max(0.0, min(1.0, parsed))
+    return v
+
+
 class EthicalDMAResult(PromptCarrier):
     """Result from Principled Decision Making Algorithm (PDMA) — v3.0 reshape.
 
@@ -197,6 +225,11 @@ class EthicalDMAResult(PromptCarrier):
             "See FSD/PROOF_OF_BENEFIT_FEDERATION.md and FSD/DMA_BOUNCE.md."
         ),
     )
+
+    @field_validator("weight_alignment_score", "ethical_alignment_score", mode="before")
+    @classmethod
+    def _clamp_alignment_scores(cls, v: Any) -> Any:
+        return _clamp_unit_float(v)
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

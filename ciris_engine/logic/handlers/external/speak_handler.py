@@ -1,7 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Set, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
@@ -86,11 +86,20 @@ class SpeakHandler(BaseActionHandler):
             return params_or_error  # Error handled, return follow_up_id
         params = params_or_error
 
-        # Resolve channel ID
-        channel_id = self._resolve_channel_id(params, thought, dispatch_context)
+        # Resolve destination and enforce task audience boundary (CIRISAgent#1374 / A046)
+        content_str = self._extract_content_string(params)
+        channel_id, refusal_reason = self._resolve_and_authorize_channel_id(params, thought, dispatch_context)
+        if refusal_reason is not None:
+            return self._refuse_unauthorized_channel(
+                thought=thought,
+                result=result,
+                attempted_channel=channel_id,
+                content=content_str,
+                reason=refusal_reason,
+                start_time=start_time,
+            )
 
         # Send the message
-        content_str = self._extract_content_string(params)
         success = await self._send_notification(channel_id, content_str)
 
         # Handle failure by injecting error message
@@ -136,34 +145,118 @@ class SpeakHandler(BaseActionHandler):
             )
             return follow_up_id or ""  # Return empty string if None (should not happen)
 
-    def _resolve_channel_id(self, params: SpeakParams, thought: Thought, dispatch_context: DispatchContext) -> str:
-        """Resolve channel ID from params, context, or thought."""
-        channel_id = None
+    def _resolve_permitted_audience(
+        self, thought: Thought, dispatch_context: DispatchContext
+    ) -> Tuple[Optional[str], Set[str]]:
+        """Return (origin_channel_id, permitted_channel_ids) from kernel/persistence state.
 
-        # First check params.channel_id
+        Audience comes strictly from trusted task/thought/dispatch metadata —
+        never from model-authored ``SpeakParams``.
+        """
+        permitted: Set[str] = set()
+        origin_channel = self._get_channel_id(thought, dispatch_context)
+        if origin_channel:
+            permitted.add(origin_channel)
+            permitted.add(_normalize_channel_id(origin_channel, thought))
+
+        if thought.source_task_id:
+            task = persistence.get_task_by_id(thought.source_task_id)
+            if task and task.channel_id:
+                permitted.add(task.channel_id)
+                permitted.add(_normalize_channel_id(task.channel_id, thought))
+                if not origin_channel:
+                    origin_channel = task.channel_id
+
+        normalized_origin = _normalize_channel_id(origin_channel, thought) if origin_channel else None
+        return normalized_origin, permitted
+
+    def _resolve_and_authorize_channel_id(
+        self, params: SpeakParams, thought: Thought, dispatch_context: DispatchContext
+    ) -> Tuple[str, Optional[str]]:
+        """Resolve channel ID and verify model-supplied destinations against task audience.
+
+        Returns ``(channel_id, None)`` when authorized, or
+        ``(attempted_channel_id, refusal_reason)`` when a model-supplied
+        destination falls outside the task's permitted audience (CIRISAgent#1374).
+        """
+        origin_channel, permitted = self._resolve_permitted_audience(thought, dispatch_context)
+
+        requested_channel: Optional[str] = None
         if params.channel_id:
-            channel_id = params.channel_id
-            logger.info(f"SPEAK: Using channel_id '{channel_id}' from params.channel_id")
-
-        # Second check params.channel_context
+            requested_channel = params.channel_id
+            logger.info(f"SPEAK: Model requested channel_id '{requested_channel}' via params.channel_id")
         elif params.channel_context:
-            channel_id = extract_channel_id(params.channel_context)
-            if channel_id:
-                logger.info(f"SPEAK: Using channel_id '{channel_id}' from params.channel_context")
+            requested_channel = extract_channel_id(params.channel_context)
+            if requested_channel:
+                logger.info(f"SPEAK: Model requested channel_id '{requested_channel}' via params.channel_context")
 
-        # Fall back to thought/task context
-        if not channel_id:
-            channel_id = self._get_channel_id(thought, dispatch_context)
-            if channel_id:
-                logger.info(f"SPEAK: Using channel_id '{channel_id}' from thought/task context")
-
-        if not channel_id:
-            logger.error(f"CRITICAL: No channel_id found in params or thought {thought.thought_id} context")
-            raise ValueError(
-                f"Channel ID is required for SPEAK action - none found in params or thought {thought.thought_id}"
+        if requested_channel is not None:
+            normalized_requested = _normalize_channel_id(requested_channel, thought)
+            if requested_channel in permitted or normalized_requested in permitted:
+                return normalized_requested, None
+            reason = (
+                f"audience_mismatch: destination '{normalized_requested}' is outside the "
+                f"permitted audience for task {thought.source_task_id or 'unknown'} "
+                f"(origin: '{origin_channel or 'none'}')"
             )
+            logger.warning(f"SPEAK refused for thought {thought.thought_id}: {reason}")
+            return normalized_requested, reason
 
-        return _normalize_channel_id(channel_id, thought)
+        if origin_channel:
+            logger.info(f"SPEAK: Using originating channel_id '{origin_channel}' from thought/task context")
+            return origin_channel, None
+
+        logger.error(f"CRITICAL: No channel_id found in params or thought {thought.thought_id} context")
+        raise ValueError(
+            f"Channel ID is required for SPEAK action - none found in params or thought {thought.thought_id}"
+        )
+
+    def _resolve_channel_id(self, params: SpeakParams, thought: Thought, dispatch_context: DispatchContext) -> str:
+        """Resolve channel ID from params, context, or thought (legacy helper)."""
+        channel_id, refusal_reason = self._resolve_and_authorize_channel_id(params, thought, dispatch_context)
+        if refusal_reason is not None:
+            raise PermissionError(refusal_reason)
+        return channel_id
+
+    def _refuse_unauthorized_channel(
+        self,
+        *,
+        thought: Thought,
+        result: ActionSelectionDMAResult,
+        attempted_channel: str,
+        content: str,
+        reason: str,
+        start_time: datetime,
+    ) -> str:
+        """Record correlation and follow-up when SPEAK targets a channel outside the task audience."""
+        summary = f"Refused SPEAK to unauthorized channel {attempted_channel}: {reason}"
+        self._create_speak_correlation(
+            thought,
+            attempted_channel,
+            content,
+            success=False,
+            start_time=start_time,
+            result_summary=summary,
+        )
+        follow_up_text = self._localized_followup(
+            "speak_audience_refused",
+            default=(
+                f"SPEAK REFUSED ({reason}). No message was sent to channel {attempted_channel}. "
+                "You may only speak to the originating channel for this task."
+            ),
+            channel_id=attempted_channel,
+            reason=reason,
+        )
+        follow_up_thought_id = self.complete_thought_and_create_followup(
+            thought=thought,
+            follow_up_content=follow_up_text,
+            action_result=result,
+            status=ThoughtStatus.FAILED,
+        )
+        if not follow_up_thought_id:
+            raise FollowUpCreationError("Failed to create follow-up thought")
+        self._update_trace_correlation(False, summary)
+        return follow_up_thought_id
 
     def _extract_content_string(self, params: SpeakParams) -> str:
         """Extract string content from params."""
@@ -191,7 +284,13 @@ class SpeakHandler(BaseActionHandler):
             logger.warning(f"Could not inject error message after SPEAK failure: {e}")
 
     def _create_speak_correlation(
-        self, thought: Thought, channel_id: str, content: str, success: bool, start_time: datetime
+        self,
+        thought: Thought,
+        channel_id: str,
+        content: str,
+        success: bool,
+        start_time: datetime,
+        result_summary: Optional[str] = None,
     ) -> None:
         """Create service correlation for SPEAK action tracking."""
         now = self.time_service.now()
@@ -208,7 +307,7 @@ class SpeakHandler(BaseActionHandler):
 
         response_data = ServiceResponseData(
             success=success,
-            result_summary=f"Message {'sent' if success else 'failed'} to channel {channel_id}",
+            result_summary=result_summary or f"Message {'sent' if success else 'failed'} to channel {channel_id}",
             execution_time_ms=(now - start_time).total_seconds() * 1000.0,
             response_timestamp=now,
         )

@@ -23,8 +23,9 @@ import logging
 import shutil
 import signal
 import subprocess
+from collections import deque
 from pathlib import Path
-from typing import List, Optional
+from typing import Deque, List, Optional
 
 from .config import MobileLocalLLMConfig
 
@@ -43,6 +44,9 @@ except ImportError:  # pragma: no cover - fallback path
     _HAVE_AIOHTTP = False
 
 
+_MAX_RECENT_LOG_LINES = 20
+
+
 class InferenceServerError(RuntimeError):
     """Raised when the local inference server cannot be managed."""
 
@@ -56,6 +60,9 @@ class InferenceServerManager:
         self._owned_process = False  # False when we attached to a pre-existing server
         self._last_exit_code: Optional[int] = None
         self._started = False
+        self._stdout_task: Optional[asyncio.Task[None]] = None
+        self._recent_output: Deque[str] = deque(maxlen=_MAX_RECENT_LOG_LINES)
+        self._last_probe_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Properties
@@ -109,7 +116,12 @@ class InferenceServerManager:
             )
             self._owned_process = False
 
-        await self._wait_until_ready()
+        try:
+            await self._wait_until_ready()
+        except BaseException:
+            if self._owned_process:
+                await self.stop()
+            raise
         self._started = True
         logger.info("Local inference server ready at %s", self._config.base_url())
 
@@ -117,11 +129,13 @@ class InferenceServerManager:
         """Stop the managed process gracefully, with a forced kill fallback."""
         self._started = False
         if self._process is None:
+            await self._cancel_stdout_task()
             return
 
         if self._process.returncode is not None:
             self._last_exit_code = self._process.returncode
             self._process = None
+            await self._cancel_stdout_task()
             return
 
         logger.info("Stopping local inference server (pid=%s)", self._process.pid)
@@ -129,6 +143,7 @@ class InferenceServerManager:
             self._process.send_signal(signal.SIGTERM)
         except ProcessLookupError:
             self._process = None
+            await self._cancel_stdout_task()
             return
 
         try:
@@ -148,6 +163,7 @@ class InferenceServerManager:
 
         self._last_exit_code = self._process.returncode
         self._process = None
+        await self._cancel_stdout_task()
 
     async def health_check(self) -> bool:
         """Return True if the server responds on /health within a short timeout."""
@@ -169,6 +185,7 @@ class InferenceServerManager:
 
         argv = self._build_argv(binary)
         logger.info("Spawning local inference server: %s", " ".join(argv))
+        self._recent_output.clear()
         try:
             self._process = await asyncio.create_subprocess_exec(
                 *argv,
@@ -179,6 +196,41 @@ class InferenceServerManager:
         except (OSError, FileNotFoundError) as exc:
             raise InferenceServerError(f"Failed to spawn inference server: {exc}") from exc
         self._owned_process = True
+        if isinstance(self._process.stdout, asyncio.StreamReader):
+            self._stdout_task = asyncio.create_task(
+                self._drain_stdout(self._process.stdout),
+                name="mobile-local-llm-stdout",
+            )
+
+    async def _drain_stdout(self, stream: asyncio.StreamReader) -> None:
+        """Continuously drain merged stdout/stderr so the pipe buffer never deadlocks."""
+        try:
+            while True:
+                raw = await stream.readline()
+                if not raw:
+                    break
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                if line:
+                    self._recent_output.append(line)
+                    logger.debug("mobile_local_llm server: %s", line)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("Inference server stdout reader stopped: %s", exc)
+
+    async def _cancel_stdout_task(self) -> None:
+        if self._stdout_task is None:
+            return
+        task = self._stdout_task
+        self._stdout_task = None
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    def _format_recent_output(self) -> str:
+        if not self._recent_output:
+            return ""
+        return " | recent output: " + " ; ".join(self._recent_output)
 
     def _build_argv(self, binary: Path) -> List[str]:
         argv: List[str] = [str(binary)]
@@ -201,19 +253,23 @@ class InferenceServerManager:
 
     async def _wait_until_ready(self) -> None:
         timeout = self._config.ready_timeout_seconds
-        deadline = asyncio.get_event_loop().time() + timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         interval = 0.5
-        last_error: Optional[str] = None
+        self._last_probe_error = None
         while True:
             if self._owned_process and self._process is not None and self._process.returncode is not None:
                 self._last_exit_code = self._process.returncode
-                raise InferenceServerError(f"Inference server exited during startup (code={self._process.returncode})")
+                raise InferenceServerError(
+                    f"Inference server exited during startup (code={self._process.returncode})"
+                    f"{self._format_recent_output()}"
+                )
             if await self._probe_health(timeout=1.5):
                 return
-            if asyncio.get_event_loop().time() >= deadline:
+            if loop.time() >= deadline:
+                detail = f": {self._last_probe_error}" if self._last_probe_error else ""
                 raise InferenceServerError(
-                    f"Inference server did not become ready within {timeout:.1f}s"
-                    + (f": {last_error}" if last_error else "")
+                    f"Inference server did not become ready within {timeout:.1f}s{detail}{self._format_recent_output()}"
                 )
             await asyncio.sleep(interval)
 
@@ -224,25 +280,36 @@ class InferenceServerManager:
                 client_timeout = aiohttp.ClientTimeout(total=timeout)
                 async with aiohttp.ClientSession(timeout=client_timeout) as session:
                     async with session.get(url) as response:
-                        return 200 <= response.status < 500
+                        if 200 <= response.status < 300:
+                            self._last_probe_error = None
+                            return True
+                        self._last_probe_error = f"HTTP {response.status} from {url}"
+                        return False
             except Exception as exc:  # pragma: no cover - network variability
+                self._last_probe_error = str(exc) or exc.__class__.__name__
                 logger.debug("aiohttp health probe failed for %s: %s", url, exc)
                 return False
-        return await asyncio.to_thread(self._sync_probe_health, url, timeout)
+        ok, err = await asyncio.to_thread(self._sync_probe_health, url, timeout)
+        self._last_probe_error = err
+        return ok
 
     @staticmethod
-    def _sync_probe_health(url: str, timeout: float) -> bool:
-        from urllib.error import URLError
+    def _sync_probe_health(url: str, timeout: float) -> tuple[bool, Optional[str]]:
+        from urllib.error import HTTPError, URLError
         from urllib.request import urlopen
 
         try:
             with urlopen(url, timeout=timeout) as response:  # noqa: S310 - loopback only
                 status: int = response.status
-                return 200 <= status < 500
-        except URLError:
-            return False
-        except Exception:  # pragma: no cover - best-effort probe
-            return False
+                if 200 <= status < 300:
+                    return True, None
+                return False, f"HTTP {status} from {url}"
+        except HTTPError as exc:
+            return False, f"HTTP {exc.code} from {url}"
+        except URLError as exc:
+            return False, str(exc.reason)
+        except Exception as exc:  # pragma: no cover - best-effort probe
+            return False, str(exc) or exc.__class__.__name__
 
 
 __all__ = ["InferenceServerManager", "InferenceServerError"]

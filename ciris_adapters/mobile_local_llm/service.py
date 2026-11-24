@@ -52,6 +52,8 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
         self._capability: Optional[DeviceCapabilityReport] = capability_report
         self._available = False  # flips to True once server is up and variant is supported
         self._started_at: Optional[float] = None
+        self._openai_client: Optional[Any] = None
+        self._patched_client: Optional[Any] = None
 
         # Rollup metrics (reported via get_metrics()).
         self._total_requests = 0
@@ -160,13 +162,31 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
         )
 
     async def stop(self) -> None:
-        """Tear down the local server and mark ourselves unavailable."""
+        """Tear down the local server, close the HTTP client, and mark unavailable."""
         self._available = False
+        await self._close_client()
         try:
             await self._server.stop()
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("MobileLocalLLM: error stopping inference server: %s", exc)
         await super().stop()
+
+    async def _close_client(self) -> None:
+        """Close the cached AsyncOpenAI client if one was created."""
+        client = self._openai_client
+        self._openai_client = None
+        self._patched_client = None
+        if client is None:
+            return
+        close_fn = getattr(client, "close", None)
+        if close_fn is None:
+            return
+        try:
+            result = close_fn()
+            if hasattr(result, "__await__"):
+                await result
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("MobileLocalLLM: error closing OpenAI client: %s", exc)
 
     # ------------------------------------------------------------------
     # Health / status
@@ -283,19 +303,16 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
         )
         return parsed, usage
 
-    async def _dispatch_structured(
-        self,
-        *,
-        messages: List[MessageDict],
-        response_model: Type[BaseModel],
-        max_tokens: int,
-        temperature: float,
-    ) -> BaseModel:
-        """Actually call the on-device OpenAI-compatible server.
+    def _get_patched_client(self) -> Any:
+        """Return a cached instructor-patched AsyncOpenAI client.
 
-        We import ``openai`` and ``instructor`` lazily so that devices that
-        never load this adapter do not pay the import cost.
+        Lazily imports ``openai`` and ``instructor`` so devices that never load
+        this adapter do not pay the import cost, and reuses the underlying
+        connection pool across calls until :meth:`stop` closes it.
         """
+        if self._patched_client is not None:
+            return self._patched_client
+
         try:
             import instructor  # type: ignore[import-not-found]
             from openai import AsyncOpenAI  # type: ignore[import-not-found]
@@ -311,7 +328,20 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
             # default here is a single attempt.
             max_retries=0,
         )
-        patched = instructor.patch(client)
+        self._openai_client = client
+        self._patched_client = instructor.patch(client)
+        return self._patched_client
+
+    async def _dispatch_structured(
+        self,
+        *,
+        messages: List[MessageDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+    ) -> BaseModel:
+        """Actually call the on-device OpenAI-compatible server."""
+        patched = self._get_patched_client()
 
         response = await patched.chat.completions.create(
             model=self._config.model_variant.value,

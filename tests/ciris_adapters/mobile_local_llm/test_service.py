@@ -217,6 +217,54 @@ class TestCallLLMStructured:
         assert svc.available is False
         await svc.stop()
 
+    async def test_validation_error_keeps_service_available(self):
+        from pydantic import ValidationError
+
+        cfg = MobileLocalLLMConfig()
+        mgr = _fake_server_manager(available=True, health=True)
+        svc = MobileLocalLLMService(cfg, server_manager=mgr, capability_report=_capable_report())
+        await svc.start()
+
+        async def bad_schema(**_kwargs):
+            _SampleResponse.model_validate({})
+
+        with mock.patch.object(svc, "_dispatch_structured", side_effect=bad_schema):
+            with pytest.raises(ValidationError):
+                await svc.call_llm_structured(
+                    messages=[{"role": "user", "content": "hi"}],
+                    response_model=_SampleResponse,
+                )
+        assert svc.available is True
+        await svc.stop()
+
+    async def test_uses_real_server_token_usage_when_present(self):
+        from types import SimpleNamespace
+
+        cfg = MobileLocalLLMConfig()
+        mgr = _fake_server_manager(available=True, health=True)
+        svc = MobileLocalLLMService(cfg, server_manager=mgr, capability_report=_capable_report())
+        await svc.start()
+
+        parsed = _SampleResponse(answer="ok")
+        parsed._raw_response = SimpleNamespace(  # type: ignore[attr-defined]
+            usage=SimpleNamespace(prompt_tokens=42, completion_tokens=17)
+        )
+
+        async def fake_dispatch(**_kwargs):
+            return parsed
+
+        with mock.patch.object(svc, "_dispatch_structured", side_effect=fake_dispatch):
+            _, usage = await svc.call_llm_structured(
+                messages=[{"role": "user", "content": "hello"}],
+                response_model=_SampleResponse,
+                max_tokens=1024,
+            )
+
+        assert usage.tokens_input == 42
+        assert usage.tokens_output == 17
+        assert usage.tokens_used == 59
+        await svc.stop()
+
 
 class TestTokenEstimator:
     def test_counts_word_tokens_with_1_3_multiplier(self):

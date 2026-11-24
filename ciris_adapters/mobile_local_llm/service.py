@@ -11,11 +11,12 @@ healthy=False so the bus falls back to a hosted LLM provider.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as LLMServiceProtocol
@@ -90,6 +91,10 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
     @property
     def capability_report(self) -> Optional[DeviceCapabilityReport]:
         return self._capability
+
+    def set_capability_report(self, report: DeviceCapabilityReport) -> None:
+        """Supply a pre-computed capability report so start() does not re-probe."""
+        self._capability = report
 
     @property
     def config(self) -> MobileLocalLLMConfig:
@@ -257,18 +262,23 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
+        except (ValidationError, json.JSONDecodeError):
+            self._total_errors += 1
+            # A malformed JSON / schema mismatch means the server is alive but
+            # the model emitted invalid output — do not permanently disable
+            # local inference for the rest of the session.
+            raise
         except Exception:
             self._total_errors += 1
-            # Any inference failure means the server is suspect; drop to
+            # Transport or server failures mean the server is suspect; drop to
             # unavailable and let the bus retry against the next provider.
             self._available = False
             raise
 
-        # Cheap token estimate for resource accounting. Real servers return
-        # usage details but we do not require them — the LLM bus only needs
-        # token counts for budgeting / telemetry.
-        input_tokens = _estimate_input_tokens(messages)
-        output_tokens = max(1, max_tokens // 4)
+        # Prefer actual token counts reported by the inference server when
+        # instructor attaches `_raw_response.usage`; fall back to a rough
+        # heuristic when the server omits usage telemetry.
+        input_tokens, output_tokens = _extract_token_usage(parsed, messages, max_tokens)
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
 
@@ -328,6 +338,26 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
 # ---------------------------------------------------------------------------
 # Small helpers (kept module-level to simplify testing)
 # ---------------------------------------------------------------------------
+
+
+def _extract_token_usage(
+    parsed: BaseModel,
+    messages: List[MessageDict],
+    max_tokens: int,
+) -> Tuple[int, int]:
+    """Read real prompt/completion token counts from instructor's raw response when present."""
+    raw = getattr(parsed, "_raw_response", None)
+    usage = getattr(raw, "usage", None) if raw is not None else None
+    prompt_tokens = getattr(usage, "prompt_tokens", None) if usage is not None else None
+    completion_tokens = getattr(usage, "completion_tokens", None) if usage is not None else None
+    if (
+        isinstance(prompt_tokens, int)
+        and isinstance(completion_tokens, int)
+        and prompt_tokens >= 0
+        and completion_tokens >= 0
+    ):
+        return prompt_tokens, completion_tokens
+    return _estimate_input_tokens(messages), max(1, max_tokens // 4)
 
 
 def _estimate_input_tokens(messages: List[MessageDict]) -> int:

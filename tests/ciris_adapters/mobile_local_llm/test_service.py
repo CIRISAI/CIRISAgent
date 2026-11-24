@@ -217,6 +217,41 @@ class TestCallLLMStructured:
         assert svc.available is False
         await svc.stop()
 
+    async def test_dispatch_reuses_openai_client_and_closes_on_stop(self):
+        cfg = MobileLocalLLMConfig()
+        mgr = _fake_server_manager(available=True, health=True)
+        svc = MobileLocalLLMService(cfg, server_manager=mgr, capability_report=_capable_report())
+        await svc.start()
+
+        fake_client = mock.MagicMock()
+        fake_client.close = mock.AsyncMock(return_value=None)
+        fake_patched = mock.MagicMock()
+        fake_patched.chat.completions.create = mock.AsyncMock(return_value=_SampleResponse(answer="ok"))
+
+        with mock.patch("openai.AsyncOpenAI", return_value=fake_client) as client_cls, mock.patch(
+            "instructor.patch", return_value=fake_patched
+        ) as patch_fn:
+            await svc._dispatch_structured(
+                messages=[{"role": "user", "content": "one"}],
+                response_model=_SampleResponse,
+                max_tokens=16,
+                temperature=0.0,
+            )
+            await svc._dispatch_structured(
+                messages=[{"role": "user", "content": "two"}],
+                response_model=_SampleResponse,
+                max_tokens=16,
+                temperature=0.0,
+            )
+            assert client_cls.call_count == 1
+            assert patch_fn.call_count == 1
+            assert fake_patched.chat.completions.create.await_count == 2
+
+        await svc.stop()
+        fake_client.close.assert_awaited_once()
+        assert svc._openai_client is None  # type: ignore[attr-defined]
+        assert svc._patched_client is None  # type: ignore[attr-defined]
+
 
 class TestTokenEstimator:
     def test_counts_word_tokens_with_1_3_multiplier(self):

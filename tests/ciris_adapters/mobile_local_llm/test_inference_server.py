@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import signal
+import sys
 from unittest import mock
 
 import pytest
@@ -167,3 +169,123 @@ class TestHealthCheck:
 
         assert await mgr.health_check() is False
         assert mgr.last_exit_code == 1
+
+    async def test_startup_timeout_stops_spawned_subprocess(self, tmp_path):
+        binary = tmp_path / "srv"
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+
+        fake_process = mock.MagicMock()
+        fake_process.returncode = None
+        fake_process.pid = 9999
+
+        async def _graceful_wait() -> int:
+            fake_process.returncode = -signal.SIGTERM
+            return -signal.SIGTERM
+
+        fake_process.wait = mock.AsyncMock(side_effect=_graceful_wait)
+        fake_process.send_signal = mock.MagicMock()
+
+        async def fake_exec(*_args, **_kwargs):
+            return fake_process
+
+        cfg = _config(server_binary=binary, ready_timeout_seconds=0.1)
+        mgr = InferenceServerManager(cfg)
+        with mock.patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            with mock.patch.object(mgr, "_probe_health", mock.AsyncMock(return_value=False)):
+                with pytest.raises(InferenceServerError):
+                    await mgr.start()
+
+        fake_process.send_signal.assert_called_once_with(signal.SIGTERM)
+        fake_process.wait.assert_awaited()
+        assert mgr.process_id is None
+
+    async def test_stdout_stream_is_drained_and_reported_on_startup_failure(self, tmp_path):
+        binary = tmp_path / "srv"
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+
+        stream = asyncio.StreamReader()
+        stream.feed_data(b"loading model...\nfatal: invalid model header\n")
+        stream.feed_eof()
+
+        fake_process = mock.MagicMock()
+        fake_process.returncode = 1
+        fake_process.pid = 4321
+        fake_process.stdout = stream
+
+        async def fake_exec(*_args, **_kwargs):
+            return fake_process
+
+        cfg = _config(server_binary=binary, ready_timeout_seconds=0.5)
+        mgr = InferenceServerManager(cfg)
+        with mock.patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            # Yield once so the stdout drain task reads the buffered lines before exit check.
+            original_wait = mgr._wait_until_ready
+
+            async def _wait_after_yield() -> None:
+                await asyncio.sleep(0.02)
+                await original_wait()
+
+            with mock.patch.object(mgr, "_wait_until_ready", side_effect=_wait_after_yield):
+                with pytest.raises(InferenceServerError, match="invalid model header"):
+                    await mgr.start()
+
+        assert mgr._stdout_task is None  # type: ignore[attr-defined]
+
+    async def test_real_subprocess_heavy_output_does_not_deadlock(self):
+        # Emit 128 KB (>64 KB OS pipe buffer) to stdout/stderr to verify draining prevents blocking.
+        script = "import sys; sys.stdout.write(('x' * 1024 + '\\n') * 128); sys.stdout.flush()"
+        cfg = _config(
+            server_binary=None,
+            ready_timeout_seconds=2.0,
+        )
+        mgr = InferenceServerManager(cfg)
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            stdin=asyncio.subprocess.DEVNULL,
+        )
+        mgr._process = proc  # type: ignore[attr-defined]
+        mgr._owned_process = True  # type: ignore[attr-defined]
+        assert isinstance(proc.stdout, asyncio.StreamReader)
+        mgr._stdout_task = asyncio.create_task(mgr._drain_stdout(proc.stdout))  # type: ignore[attr-defined]
+        try:
+            rc = await asyncio.wait_for(proc.wait(), timeout=5.0)
+            assert rc == 0
+        finally:
+            await mgr.stop()
+
+
+class TestSyncHealthProbe:
+    def test_sync_probe_health_accepts_only_2xx(self):
+        from urllib.error import HTTPError
+
+        class _Resp:
+            def __init__(self, status: int) -> None:
+                self.status = status
+
+            def __enter__(self) -> _Resp:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+        with mock.patch("urllib.request.urlopen", return_value=_Resp(200)):
+            ok, err = InferenceServerManager._sync_probe_health("http://127.0.0.1:8091/health", 1.0)
+            assert ok is True
+            assert err is None
+
+        with mock.patch("urllib.request.urlopen", return_value=_Resp(404)):
+            ok, err = InferenceServerManager._sync_probe_health("http://127.0.0.1:8091/health", 1.0)
+            assert ok is False
+            assert err is not None and "404" in err
+
+        http_err = HTTPError("http://127.0.0.1:8091/health", 503, "Service Unavailable", hdrs=None, fp=None)  # type: ignore[arg-type]
+        with mock.patch("urllib.request.urlopen", side_effect=http_err):
+            ok, err = InferenceServerManager._sync_probe_health("http://127.0.0.1:8091/health", 1.0)
+            assert ok is False
+            assert err is not None and "503" in err

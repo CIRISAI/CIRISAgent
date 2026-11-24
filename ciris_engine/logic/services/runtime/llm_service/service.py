@@ -1144,7 +1144,6 @@ StructuredCallFunc = Callable[
 ]
 
 
-
 def _record_raw_completion_text(completion: Any) -> None:
     """Hand the provider's completion text to the LLM capture, when one is open.
 
@@ -1167,6 +1166,24 @@ def _record_raw_completion_text(completion: Any) -> None:
         pass
 
 
+#: Flat DMA/conscience schemas without unions or ``$ref`` (CIRISAgent#895).
+#: On OpenAI-compatible endpoints configured with ``instructor_mode="JSON"``,
+#: these 6 schemas route through ``instructor.Mode.JSON_SCHEMA`` so grammar-capable
+#: local servers (llama.cpp / Ollama) enforce ``additionalProperties: false`` and
+#: prevent extra-key over-generation without triggering GBNF union fail-open on
+#: the remaining schemas.
+FLAT_JSON_SCHEMA_MODELS: frozenset[str] = frozenset(
+    {
+        "CSDMAResult",
+        "DSDMAResult",
+        "EntropyResult",
+        "CoherenceResult",
+        "OptimizationVetoResult",
+        "EpistemicHumilityResult",
+    }
+)
+
+
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     """Client for interacting with OpenAI-compatible APIs with circuit breaker protection.
 
@@ -1176,6 +1193,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     # Type annotations for client attributes - actual type varies by provider
     client: Any  # AsyncOpenAI, AsyncAnthropic, or genai module
     instruct_client: Any  # Instructor-wrapped client
+    _default_instruct_client: Any
+    _json_schema_instruct_client: Optional[Any]
 
     def __init__(
         self,
@@ -1340,6 +1359,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             timeout: Request timeout in seconds
         """
         instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
+        self._default_instruct_client = None
+        self._json_schema_instruct_client = None
 
         if provider == LLMProvider.ANTHROPIC:
             self._init_anthropic_client(api_key, model_name, timeout)
@@ -1452,12 +1473,36 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         mode_map = {
             "json": instructor.Mode.JSON,
+            "json_schema": instructor.Mode.JSON_SCHEMA,
             "tools": instructor.Mode.TOOLS,
             "md_json": instructor.Mode.MD_JSON,
         }
         selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
         self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
+        self._default_instruct_client = self.instruct_client
+        # Route the 6 flat DMA/conscience schemas through JSON_SCHEMA mode when
+        # the provider defaults to JSON mode (CIRISAgent#895). Both wrappers
+        # share ``self.client`` so connection pooling and endpoint failover stay
+        # unified.
+        if selected_mode == instructor.Mode.JSON:
+            self._json_schema_instruct_client = instructor.from_openai(self.client, mode=instructor.Mode.JSON_SCHEMA)
         logger.info(f"Initialized OpenAI client with model={model_name}, mode={selected_mode}")
+
+    def _select_instruct_client(self, response_model: Type[BaseModel]) -> Any:
+        """Select the instructor client for ``response_model`` (CIRISAgent#895).
+
+        Uses ``Mode.JSON_SCHEMA`` for the 6 flat DMA/conscience schemas when the
+        default OpenAI-compatible client is in ``Mode.JSON`` and has not been
+        replaced (e.g., by a test double). Union/nested schemas stay on
+        ``self.instruct_client``.
+        """
+        if (
+            self._json_schema_instruct_client is not None
+            and self.instruct_client is self._default_instruct_client
+            and getattr(response_model, "__name__", "") in FLAT_JSON_SCHEMA_MODELS
+        ):
+            return self._json_schema_instruct_client
+        return self.instruct_client
 
     def _init_anthropic_client(self, api_key: str, model_name: str, timeout: int) -> None:
         """Initialize the Claude client: the native SDK, or the Claude API over HTTPS without it.
@@ -2015,7 +2060,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     # occurrence. Our outer `_retry_with_backoff` handles
                     # remediable 400s (context_length, content_filter) with
                     # CIRIS-specific remediation per `LLM_ERROR_REMEDIATIONS`.
-                    response, completion = await self.instruct_client.chat.completions.create_with_completion(
+                    active_instruct_client = self._select_instruct_client(resp_model)
+                    response, completion = await active_instruct_client.chat.completions.create_with_completion(
                         model=self.model_name,
                         messages=cast(Any, msg_list),
                         response_model=resp_model,

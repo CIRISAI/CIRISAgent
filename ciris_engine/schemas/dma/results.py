@@ -14,9 +14,9 @@ using convert_llm_result_to_action_result().
 import logging
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
 from ciris_engine.schemas.types import JSONDict
 
 from ..actions.parameters import (
@@ -300,19 +300,23 @@ class ASPDMALLMResult(PromptCarrier):
     reasoning: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
 
     # === SPEAK parameters ===
-    speak_content: Optional[str] = Field(None, description="Content to speak (for SPEAK action)")
+    # Non-nullable defaults eliminate JSON Schema ``anyOf`` unions so local
+    # GBNF grammar backends (llama.cpp / Ollama) constrain ASPDMA cleanly
+    # instead of failing open (CIRISAgent#893). Explicit ``null`` values from
+    # callers/models are coerced to empty defaults by the validators below.
+    speak_content: str = Field(default="", description="Content to speak (for SPEAK action)")
 
     # === PONDER parameters ===
-    ponder_questions: Optional[List[str]] = Field(None, description="Questions to ponder (for PONDER action)")
+    ponder_questions: List[str] = Field(default_factory=list, description="Questions to ponder (for PONDER action)")
 
     # === REJECT parameters ===
-    reject_reason: Optional[str] = Field(None, description="Reason for rejection (for REJECT action)")
+    reject_reason: str = Field(default="", description="Reason for rejection (for REJECT action)")
     reject_create_filter: bool = Field(False, description="Whether to create adaptive filter (for REJECT)")
 
     # === TOOL parameters ===
     # NOTE: ASPDMA only selects the tool NAME. TSASPDMA extracts parameters using full tool documentation.
-    tool_name: Optional[str] = Field(
-        None, description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters."
+    tool_name: str = Field(
+        default="", description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters."
     )
 
     # === OBSERVE parameters ===
@@ -325,12 +329,27 @@ class ASPDMALLMResult(PromptCarrier):
     # ThoughtProcessor._refuse_unapproved_identity_memorize). Dropping this field
     # would leave that decision to MSASPDMA, which is the model that once
     # answered such a request with "the change has been applied".
-    memorize_scope: Optional[str] = Field(
-        None, description="Scope of a MEMORIZE: local, identity, environment, community"
-    )
+    memorize_scope: str = Field(default="", description="Scope of a MEMORIZE: local, identity, environment, community")
 
     # === TASK_COMPLETE parameters ===
-    completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
+    completion_reason: str = Field(default="", description="Reason for task completion (for TASK_COMPLETE)")
+
+    @field_validator(
+        "speak_content",
+        "reject_reason",
+        "tool_name",
+        "memorize_scope",
+        "completion_reason",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_null_str(cls, v: Any) -> Any:
+        return "" if v is None else v
+
+    @field_validator("ponder_questions", mode="before")
+    @classmethod
+    def _coerce_null_list(cls, v: Any) -> Any:
+        return [] if v is None else v
 
     # selection_confidence and alternatives_considered were briefly added here
     # (commit 4ffe82895) as a deliberation-diversity signal for k_eff analysis.

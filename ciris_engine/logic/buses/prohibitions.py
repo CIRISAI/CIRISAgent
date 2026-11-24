@@ -174,6 +174,17 @@ MEDICAL_CAPABILITIES = {
     "trauma_care",
     "wound_care",
     "wound_treatment",
+    # Physiological / biometric / coordinated care hardening (#1344)
+    "physiological",
+    "biological_monitoring",
+    "biosensing",
+    "biometric",
+    "biometric_analysis",
+    "care_coordination",
+    "care_management",
+    "emergency_assessment",
+    "preventive_care",
+    "integrative_care",
 }
 
 FINANCIAL_CAPABILITIES = {
@@ -1236,6 +1247,17 @@ def get_capability_category(capability: str) -> Optional[str]:
     Returns:
         Category name if prohibited, None if allowed
     """
+    # Specific biometric prohibitions (NEVER_ALLOWED / IDENTITY_VERIFICATION)
+    # must win over the broader "biometric" term in MEDICAL_CAPABILITIES (#1344)
+    # so e.g. "biometric_categorization" is never downgraded from NEVER_ALLOWED
+    # to REQUIRES_SEPARATE_MODULE.
+    if _BIOMETRIC_INFERENCE_REGEX.search(capability):
+        return "BIOMETRIC_INFERENCE"
+    if _SURVEILLANCE_MASS_REGEX.search(capability):
+        return "SURVEILLANCE_MASS"
+    if _IDENTITY_VERIFICATION_REGEX.search(capability):
+        return "IDENTITY_VERIFICATION"
+
     # Check prohibited capabilities using pre-compiled regex patterns
     if _MEDICAL_REGEX.search(capability):
         return "MEDICAL"
@@ -1247,8 +1269,6 @@ def get_capability_category(capability: str) -> Optional[str]:
         return "SPIRITUAL_DIRECTION"
     if _HOME_SECURITY_REGEX.search(capability):
         return "HOME_SECURITY"
-    if _IDENTITY_VERIFICATION_REGEX.search(capability):
-        return "IDENTITY_VERIFICATION"
     if _CONTENT_MODERATION_REGEX.search(capability):
         return "CONTENT_MODERATION"
     if _RESEARCH_REGEX.search(capability):
@@ -1263,16 +1283,12 @@ def get_capability_category(capability: str) -> Optional[str]:
         return "WEAPONS_HARMFUL"
     if _MANIPULATION_COERCION_REGEX.search(capability):
         return "MANIPULATION_COERCION"
-    if _SURVEILLANCE_MASS_REGEX.search(capability):
-        return "SURVEILLANCE_MASS"
     if _DECEPTION_FRAUD_REGEX.search(capability):
         return "DECEPTION_FRAUD"
     if _CYBER_OFFENSIVE_REGEX.search(capability):
         return "CYBER_OFFENSIVE"
     if _ELECTION_INTERFERENCE_REGEX.search(capability):
         return "ELECTION_INTERFERENCE"
-    if _BIOMETRIC_INFERENCE_REGEX.search(capability):
-        return "BIOMETRIC_INFERENCE"
     if _AUTONOMOUS_DECEPTION_REGEX.search(capability):
         return "AUTONOMOUS_DECEPTION"
     if _HAZARDOUS_MATERIALS_REGEX.search(capability):

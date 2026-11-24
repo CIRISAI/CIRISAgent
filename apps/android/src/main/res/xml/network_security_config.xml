@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Disallow cleartext HTTP traffic by default (#1344), while allowing cleartext
+  only to the on-device loopback node / mobile_local_llm server and local mDNS
+  (.local) peers (e.g. jetson.local, ollama.local).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">::1</domain>
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
+</network-security-config>

@@ -253,3 +253,39 @@ class TestDetectArchitecture:
     def test_normalises_common_machines(self, monkeypatch, machine, expected):
         monkeypatch.setattr("platform.machine", lambda: machine)
         assert detect_architecture() == expected
+
+
+class TestSystemProbes:
+    def test_read_total_ram_gb_uses_posix_sysconf_when_proc_unavailable(self, monkeypatch):
+        from ciris_adapters.mobile_local_llm import capability
+
+        monkeypatch.setattr(capability, "_read_proc_file", lambda _path: None)
+        monkeypatch.setattr(
+            capability.os,
+            "sysconf",
+            lambda name: 4096 if name == "SC_PAGE_SIZE" else (8 * 1024**3) // 4096,
+        )
+        assert capability.read_total_ram_gb() == pytest.approx(8.0)
+
+    def test_probe_checks_free_disk_on_model_path_parent(self, tmp_path, monkeypatch):
+        from ciris_adapters.mobile_local_llm import capability
+
+        model_dir = tmp_path / "models"
+        model_dir.mkdir()
+        model_file = model_dir / "gemma.litert"
+        seen_paths = []
+
+        def fake_free_disk(path=None):
+            seen_paths.append(path)
+            return 10.0
+
+        monkeypatch.setattr(capability, "read_free_disk_gb", fake_free_disk)
+        report = probe_device_capability(
+            _config(model_path=model_file),
+            platform_fn=lambda: Platform.ANDROID,
+            arch_fn=lambda: "arm64-v8a",
+            total_ram_fn=lambda: 8.0,
+            available_ram_fn=lambda: 4.0,
+        )
+        assert report.capable is True
+        assert seen_paths == [model_dir]

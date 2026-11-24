@@ -128,9 +128,12 @@ class MobileLocalLLMAdapter(Service):
     async def start(self) -> None:
         logger.info("Starting MobileLocalLLMAdapter")
         # Probe once at adapter level so get_status() has something to show
-        # even if the service layer short-circuits due to enabled=False.
+        # even if the service layer short-circuits due to enabled=False, and
+        # pass the report to the service to avoid probing twice.
         self._capability = probe_device_capability(self._config)
         logger.info("Device capability: %s", self._capability.summary())
+        if self._llm_service.capability_report is None:
+            self._llm_service.set_capability_report(self._capability)
 
         await self._llm_service.start()
         self._running = True

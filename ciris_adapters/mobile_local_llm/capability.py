@@ -163,8 +163,8 @@ def detect_architecture() -> str:
 def read_total_ram_gb() -> float:
     """Read total RAM in gigabytes.
 
-    Uses /proc/meminfo on Linux/Android. Falls back to psutil when available
-    so iOS and desktop dev also report a reasonable number.
+    Uses /proc/meminfo on Linux/Android, falls back to POSIX ``os.sysconf``
+    (zero-dependency on iOS/macOS/Linux), and finally ``psutil`` when available.
     """
     meminfo = _read_proc_file("/proc/meminfo")
     if meminfo:
@@ -175,6 +175,14 @@ def read_total_ram_gb() -> float:
                     return kb / (1024 * 1024)
                 except (ValueError, IndexError):
                     break
+    if hasattr(os, "sysconf"):
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            phys_pages = os.sysconf("SC_PHYS_PAGES")
+            if page_size > 0 and phys_pages > 0:
+                return float(page_size * phys_pages) / (1024**3)
+        except (OSError, ValueError):
+            pass
     try:
         import psutil  # type: ignore[import-not-found]
 
@@ -270,7 +278,17 @@ def probe_device_capability(
     architecture = (arch_fn or detect_architecture)()
     total_ram_gb = (total_ram_fn or read_total_ram_gb)()
     available_ram_gb = (available_ram_fn or read_available_ram_gb)()
-    free_disk_gb = (free_disk_fn or read_free_disk_gb)()
+    if free_disk_fn is not None:
+        free_disk_gb = free_disk_fn()
+    else:
+        disk_target: Optional[Path] = None
+        for candidate in (config.model_path, config.ios_model_path):
+            if candidate is not None:
+                parent = candidate.parent
+                if parent.exists():
+                    disk_target = parent
+                    break
+        free_disk_gb = read_free_disk_gb(disk_target)
 
     reasons: List[str] = []
 

@@ -771,6 +771,9 @@ if __name__ == "__main__":
         # summary needs the interpreter's teardown. main() keeps sys.exit for
         # programmatic callers.
         _code = _exit.code if isinstance(_exit.code, int) else (0 if _exit.code is None else 1)
+        if not isinstance(_exit.code, int) and _exit.code is not None:
+            # os._exit skips the interpreter's own print of a SystemExit message.
+            print(_exit.code, file=sys.stderr)
         try:
             sys.stdout.flush()
             sys.stderr.flush()

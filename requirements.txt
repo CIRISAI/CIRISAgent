@@ -4,12 +4,12 @@
 
 # Core Dependencies
 pydantic>=2.7.0,<3.0.0
-openai>=1.0.0,<2.0.0
+openai>=2.0.0,<3.0.0  # 2.x since #1383: the <2 pin made pip backtrack instructor to 1.12.0 and its jiter<0.11, which has no cp315 wheel. <3: openai 3.x needs jiter>=0.16, which instructor 1.17 does not allow.
 anthropic>=0.40.0,<1.0.0  # Native Anthropic SDK for Claude models
 google-generativeai>=0.8.0,<1.0.0  # Native Google SDK for Gemini models (legacy)
 google-genai>=1.0.0,<2.0.0  # New Google GenAI SDK with instructor support
 jsonref>=1.0.0,<2.0.0  # Required by google-genai for schema resolution
-instructor>=1.11.3,<2.0.0
+instructor>=1.17.0,<2.0.0  # 1.17 floor (#1383): first tested with openai 2.x; Gemini helpers live in instructor.v2 (see llm_service/service.py). Still caps jiter<0.15, so Python 3.15 needs the next instructor release.
 PyYAML>=6.0.1,<7.0.0
 
 # Database — 2.9.0 Phase 5 bootstrap teardown removed psycopg2-binary

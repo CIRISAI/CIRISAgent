@@ -42,7 +42,7 @@ class _Answer(BaseModel):
 @pytest.mark.asyncio
 async def test_the_sdk_client_is_built_without_retries():
     svc = MobileLocalLLMService(MobileLocalLLMConfig(), server_manager=mock.MagicMock())
-    with mock.patch("openai.AsyncOpenAI") as client_cls, mock.patch("instructor.patch") as patch_fn:
+    with mock.patch("openai.AsyncOpenAI") as client_cls, mock.patch("instructor.from_openai") as patch_fn:
         patch_fn.return_value.chat.completions.create = mock.AsyncMock(return_value=_Answer(text="ok"))
         await svc._dispatch_structured(
             messages=[{"role": "user", "content": "hi"}], response_model=_Answer, max_tokens=8, temperature=0.0

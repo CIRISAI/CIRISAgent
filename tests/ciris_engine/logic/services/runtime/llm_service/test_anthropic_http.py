@@ -307,7 +307,7 @@ def test_which_models_reject_forced_tool_use(model, rejects):
     assert ah.claude_rejects_forced_tool_use(model) is rejects
 
 
-@pytest.mark.parametrize("model,mode_name", [("claude-opus-5-5", "ANTHROPIC_JSON"), ("claude-opus-4-8", "ANTHROPIC_TOOLS")])
+@pytest.mark.parametrize("model,mode_name", [("claude-opus-5-5", "JSON"), ("claude-opus-4-8", "TOOLS")])
 def test_the_sdk_path_never_forces_a_tool_on_models_that_reject_it(model, mode_name):
     pytest.importorskip("anthropic")
     import instructor

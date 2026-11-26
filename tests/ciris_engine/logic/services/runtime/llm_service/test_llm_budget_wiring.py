@@ -117,6 +117,43 @@ class TestOneRetryLayerPerFailure:
         assert isinstance(exc_info.value.__cause__, InternalServerError)
 
     @pytest.mark.asyncio
+    async def test_a_401_is_unwrapped_and_sent_once(self, monkeypatch):
+        """instructor >= 1.17 wraps non-retryable 401s in InstructorRetryException; unwrap to AuthenticationError."""
+        from openai import AuthenticationError
+
+        requests: List[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(401, json={"error": {"message": "invalid api key"}})
+
+        service = _service_over(handler, monkeypatch)
+        with pytest.raises(AuthenticationError):
+            await _call(service)
+
+        assert len(requests) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_remediable_400_is_unwrapped_for_remediation(self, monkeypatch):
+        """instructor >= 1.17 wraps 400s in InstructorRetryException; unwrap so _retry_with_backoff remediates."""
+        requests: List[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if len(requests) == 1:
+                return httpx.Response(
+                    400,
+                    json={"error": {"message": "maximum context length exceeded", "code": "context_length_exceeded"}},
+                )
+            return _completion(json.dumps({"answer": "recovered"}))
+
+        service = _service_over(handler, monkeypatch)
+        result = await _call(service)
+
+        assert isinstance(result, Verdict) and result.answer == "recovered"
+        assert len(requests) == 2
+
+    @pytest.mark.asyncio
     async def test_an_answer_that_does_not_fit_the_schema_is_reasked_once(self, monkeypatch):
         replies = iter(["this is not json", json.dumps({"answer": "ok"})])
         requests: List[httpx.Request] = []

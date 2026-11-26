@@ -4069,7 +4069,50 @@
     "constitutional_armed_yes": "Scharfgeschaltet: Eine Genesis ist in Kraft, ihre Inhaber sind eingesetzt, und dieser Knoten akzeptiert diese Vertrauenswurzel, sodass ein Halt eines Inhabers ihn erreicht.",
     "constitutional_armed_no": "Nicht scharfgeschaltet: Ein Halt eines Inhabers würde diesen Knoten nicht erreichen.",
     "constitutional_armed_unknown": "Ob ein Halt eines Inhabers diesen Knoten erreichen würde, ist nicht bekannt: Dieser Knoten meldet dies nicht.",
-    "constitutional_holders_count_m_unknown": "{n} Accord-Inhaber. Der Knoten hat nicht gemeldet, wie viele von ihnen zustimmen müssen."
+    "constitutional_holders_count_m_unknown": "{n} Accord-Inhaber. Der Knoten hat nicht gemeldet, wie viele von ihnen zustimmen müssen.",
+    "call_you": "Sie",
+    "call_connecting": "Verbindung wird hergestellt… Ihr Bild und Ihr Ton beginnen, sobald der Anruf die anderen erreicht.",
+    "call_not_reached": "Dieser Anruf hat niemanden erreicht. Das Gerät der anderen Person ist möglicherweise offline. Sie können den Anruf verlassen und es später noch einmal versuchen.",
+    "call_path_unnamed": "jemand in diesem Raum",
+    "call_path_both_nats_random": "Ihr Netzwerk und das Netzwerk von {person} können sich nicht direkt miteinander verbinden.",
+    "call_path_punch_no_answer": "{person} konnte nicht direkt erreicht werden: Der Verbindungsversuch erhielt keine Antwort.",
+    "call_path_punch_one_way": "{person} konnte nicht direkt erreicht werden: Die Verbindung funktionierte nur in eine Richtung.",
+    "call_path_nat_undetermined": "{person} konnte nicht direkt erreicht werden, und Ihr Netzwerktyp konnte nicht vollständig ermittelt werden.",
+    "call_path_no_facilitator": "{person} konnte nicht direkt erreicht werden: Es war kein Server verfügbar, der beim Aufbau der Verbindung helfen konnte.",
+    "call_path_refused_by_peer_policy": "Direktverbindungen werden vom Knoten von {person} nicht akzeptiert.",
+    "call_path_peer_unsupported": "Eine direkte Verbindung zu {person} ist nicht möglich: Deren App unterstützt dies nicht.",
+    "call_path_budget_refused": "Gerade zu viele Verbindungsversuche. Versuchen Sie es in {seconds} s erneut.",
+    "call_path_budget_refused_shortly": "Gerade zu viele Verbindungsversuche. Versuchen Sie es in Kürze erneut.",
+    "call_path_not_trusted": "Zusätzliche Verbindungsmethoden werden nur bei Personen verwendet, denen Sie vertrauen, daher wurden sie bei {person} nicht versucht.",
+    "call_path_other": "Verbindung zu {person} konnte nicht hergestellt werden.",
+    "call_relay_refused_by_policy": "Anrufe werden nicht über die öffentlichen CIRIS-Server weitergeleitet.",
+    "call_relay_none_available": "Derzeit ist kein Relay verfügbar.",
+    "call_path_networks": "Ihr Netzwerk: {nat}. Das Netzwerk von {person} (laut deren Angabe): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Ihr Netzwerk: {nat}. Der Netzwerktyp von {person} ist nicht bekannt.",
+    "call_nat_open": "offen (kein NAT)",
+    "call_nat_full_cone": "Full-Cone-NAT",
+    "call_nat_restricted": "beschränktes NAT",
+    "call_nat_port_restricted": "portbeschränktes NAT",
+    "call_nat_symmetric": "symmetrisches NAT",
+    "call_nat_unknown": "unbekannt",
+    "call_path_port_open": "Auf Ihrem Router ist ein Port geöffnet (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Ihr Netzwerk blockiert Direktanrufe. Versuchen Sie ein anderes Netzwerk, zum Beispiel WLAN statt mobiler Daten.",
+    "call_path_action_peer": "Das Netzwerk von {person} blockiert Direktanrufe.",
+    "call_path_try_again": "Erneut versuchen",
+    "call_path_details": "Details",
+    "call_path_details_hide": "Details ausblenden",
+    "call_path_restored": "Direkt mit {person} verbunden.",
+    "call_path_restored_lan": "Direkt mit {person} verbunden, über Ihr lokales Netzwerk.",
+    "call_path_no_member_could_relay": "{person} konnte nicht direkt erreicht werden, und niemand sonst im Anruf konnte die Verbindung weiterleiten.",
+    "call_path_anonymous_no_direct": "Dieses Gerät befindet sich im anonymen Modus, der niemals direkt verbindet, daher kann es {person} nicht direkt erreichen.",
+    "call_path_restored_relay": "Verbunden mit {person} über {relayer}.",
+    "call_path_relayer_unnamed": "ein anderes Mitglied",
+    "call_relay_switch": "Anderen im Anruf helfen, sich über dieses Gerät zu verbinden",
+    "call_relay_metered_note": "Bei mobilen Daten standardmäßig deaktiviert, es sei denn, Sie schalten es ein: Das Weiterleiten von Anrufen verbraucht Ihre Daten und Akkuleistung.",
+    "call_relaying_for": "Über dieses Gerät verbundene Personen: {count}",
+    "call_relay_switch_node": "Anderen im Anruf helfen, sich über den Knoten zu verbinden, der den Anruf betreibt",
+    "call_full_no_count": "Dieser Anruf hat bereits die Höchstzahl an Personen, die ein Anruf haben kann.",
+    "call_relaying_for_node": "Über den Knoten, der den Anruf betreibt, verbundene Personen: {count}"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "Gewährt",
       "revoked": "Widerrufen",
       "expired": "Abgelaufen"
+    },
+    "custody_kind": {
+      "label": "Hält eine Kopie",
+      "gloss": "Eine Aussage eines Knotens, dass er die Bytes einer Datei hält, benannt durch ihren Hash."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Quittung",
+      "gloss": "Ein Datensatz, der bestätigt, dass etwas zugestellt wurde. Das Rückgängigmachen der Quittung macht die Zustellung nicht ungeschehen."
+    },
+    "file_version": {
+      "label": "Datei",
+      "gloss": "Eine Datei, die dort abgelegt wird, wo eine Gruppe sie sehen kann; ihre Bytes werden durch ihren Hash benannt."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Video und Bildschirmfreigabe funktionieren vorerst nur bei Anrufen zwischen zwei Personen. Dieser Anruf hat mehr Teilnehmer, daher ist es ein reiner Sprachanruf. Wenn Ihre Kamera eingeschaltet ist, sendet sie wieder, sobald der Anruf wieder zwischen zwei Personen stattfindet.",
     "relay_canonical_audio_only": "Ihr Video erreicht Sie gerade nicht: Die Verbindung zwischen Ihnen überträgt nur Ton. Sie können die andere Person weiterhin hören.",
     "share_already_live": "Sie teilen Ihren Bildschirm bereits.",
-    "no_share": "Sie teilen Ihren Bildschirm nicht."
+    "no_share": "Sie teilen Ihren Bildschirm nicht.",
+    "full": "Dieser Anruf hat bereits 4 Personen, die Höchstzahl, die ein Anruf haben kann.",
+    "shaped_only": "Anrufe sind nicht verfügbar, solange dieses Gerät auf „Beim Sprechen immer verbergen\" eingestellt ist.",
+    "relay_unavailable": "Das Weiterleiten von Anrufen für andere ist auf diesem Knoten noch nicht verfügbar.",
+    "end": {
+      "hung_up": "Sie haben den Anruf verlassen.",
+      "revoked": "Sie sind kein Mitglied dieses Raums mehr, daher wurde der Anruf beendet.",
+      "expired": "Der Raum dieses Anrufs ist abgelaufen, daher wurde der Anruf beendet."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Beide Netzwerke vergeben Ports zufällig, daher kann keine direkte Verbindung hergestellt werden.",
+      "punch_no_answer": "Es wurde versucht, eine direkte Verbindung herzustellen, aber es kam keine Antwort zurück.",
+      "punch_one_way": "Eine direkte Verbindung kam nur in eine Richtung zustande.",
+      "nat_undetermined": "Der Verbindungsversuch wurde beendet, bevor eines der beiden Netzwerke gemessen werden konnte.",
+      "no_facilitator": "Dieses Gerät hat keinen Treffpunkt für eine direkte Verbindung, oder es hat nicht geantwortet.",
+      "refused_by_peer_policy": "Das Gerät dieser Person akzeptiert keine direkten Verbindungen von diesem Gerät.",
+      "peer_unsupported": "Das Gerät dieser Person kann keine direkte Verbindung herstellen.",
+      "budget_refused": "Die aufwändigeren Verbindungstechniken, die diese Netzwerke benötigen, werden derzeit zurückgehalten. Versuchen Sie es in Kürze erneut.",
+      "not_trusted": "Dieses Gerät teilt seine Adresse nicht mit dem Gerät dieser Person.",
+      "no_member_could_relay": "Keine direkte Verbindung, und niemand sonst im Anruf konnte ihn weiterleiten.",
+      "anonymous_no_direct": "Dieses Gerät ist anonym, und anonyme Geräte stellen niemals eine direkte Verbindung her.",
+      "other": "Die Verbindung konnte nicht hergestellt werden."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Eine andere Person im Anruf leitet ihn weiter.",
+      "none_available": "Niemand im Anruf hat angeboten, ihn weiterzuleiten.",
+      "refused_by_policy": "Nur die öffentlichen CIRIS-Server könnten ihn weiterleiten, und die öffentlichen CIRIS-Server leiten Anrufe nie weiter."
+    }
   },
   "decisions": {
     "not_found": "Diese Entscheidung steht für Sie nicht mehr offen.",

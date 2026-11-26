@@ -4069,7 +4069,50 @@
     "wa_identity_profile_mismatch": "Bu ajanın kimliği, onaylanmış şablonuyla eşleşmiyor. Bu çözülene kadar hiçbir kimlik değişikliği uygulanmaz.",
     "wa_identity_profile_contested": "Bu ajanın kimliği tartışmalı. Bu çözülene kadar hiçbir kimlik değişikliği uygulanmaz.",
     "wa_identity_profile_unknown": "Bu ajan, bu uygulamanın bilmediği bir kimlik durumu bildirdi.",
-    "wa_identity_open_base_link": "Temel bağlantı isteğini aç"
+    "wa_identity_open_base_link": "Temel bağlantı isteğini aç",
+    "call_you": "Siz",
+    "call_connecting": "Bağlanılıyor… Görüntünüz ve sesiniz, arama diğerlerine ulaştığında başlar.",
+    "call_not_reached": "Bu arama kimseye ulaşmadı. Diğer kişinin cihazı çevrimdışı olabilir. Ayrılıp daha sonra tekrar deneyebilirsiniz.",
+    "call_path_unnamed": "bu odadaki biri",
+    "call_path_both_nats_random": "Ağınız ve {person}'in ağı birbirine doğrudan bağlanamıyor.",
+    "call_path_punch_no_answer": "{person}'e doğrudan ulaşılamadı: bağlantı denemesine yanıt alınamadı.",
+    "call_path_punch_one_way": "{person}'e doğrudan ulaşılamadı: bağlantı yalnızca tek yönde çalıştı.",
+    "call_path_nat_undetermined": "{person}'e doğrudan ulaşılamadı ve ağ türünüz tam olarak belirlenemedi.",
+    "call_path_no_facilitator": "{person}'e doğrudan ulaşılamadı: bağlantıyı kurmaya yardımcı olacak bir sunucu bulunamadı.",
+    "call_path_refused_by_peer_policy": "{person}'in düğümü doğrudan bağlantıları kabul etmiyor.",
+    "call_path_peer_unsupported": "{person} ile doğrudan bağlantı mümkün değil: uygulamaları bunu desteklemiyor.",
+    "call_path_budget_refused": "Az önce çok fazla bağlantı denemesi oldu. {seconds} sn sonra tekrar deneyin.",
+    "call_path_budget_refused_shortly": "Az önce çok fazla bağlantı denemesi oldu. Kısa süre sonra tekrar deneyin.",
+    "call_path_not_trusted": "Ek bağlantı yöntemleri yalnızca güvendiğiniz kişilerle kullanılır, bu yüzden {person} için denenmedi.",
+    "call_path_other": "{person}'e bağlanılamadı.",
+    "call_relay_refused_by_policy": "Aramalar CIRIS genel sunucuları üzerinden aktarılmaz.",
+    "call_relay_none_available": "Şu anda kullanılabilir bir aktarıcı yok.",
+    "call_path_networks": "Ağınız: {nat}. {person}'in ağı (kendi bildirdiği şekliyle): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Ağınız: {nat}. {person}'in ağ türü bilinmiyor.",
+    "call_nat_open": "açık (NAT yok)",
+    "call_nat_full_cone": "tam koni NAT",
+    "call_nat_restricted": "kısıtlamalı NAT",
+    "call_nat_port_restricted": "bağlantı noktası kısıtlamalı NAT",
+    "call_nat_symmetric": "simetrik NAT",
+    "call_nat_unknown": "bilinmiyor",
+    "call_path_port_open": "Yönlendiricinizde bir bağlantı noktası açık (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Ağınız doğrudan aramaları engelliyor. Farklı bir ağ deneyin, örneğin mobil veri yerine Wi-Fi.",
+    "call_path_action_peer": "{person}'in ağı doğrudan aramaları engelliyor.",
+    "call_path_try_again": "Tekrar dene",
+    "call_path_details": "Ayrıntılar",
+    "call_path_details_hide": "Ayrıntıları gizle",
+    "call_path_restored": "{person}'e doğrudan bağlanıldı.",
+    "call_path_restored_lan": "{person}'e, yerel ağınız üzerinden doğrudan bağlanıldı.",
+    "call_path_no_member_could_relay": "{person}'e doğrudan ulaşılamadı ve aramadaki başka kimse bağlantıyı aktaramadı.",
+    "call_path_anonymous_no_direct": "Bu cihaz anonim moddadır ve bu mod asla doğrudan bağlanmaz, bu yüzden {person}'e doğrudan ulaşamaz.",
+    "call_path_restored_relay": "{relayer} üzerinden {person}'e bağlanıldı.",
+    "call_path_relayer_unnamed": "başka bir üye",
+    "call_relay_switch": "Bu aramadaki diğer kişilerin bu cihaz üzerinden bağlanmasına yardımcı olun",
+    "call_relay_metered_note": "Mobil veride siz açmadığınız sürece kapalıdır: aramaları aktarmak verinizi ve pilinizi kullanır.",
+    "call_relaying_for": "Bu cihaz üzerinden bağlanan kişiler: {count}",
+    "call_relay_switch_node": "Bu aramadaki diğer kişilerin aramayı yürüten düğüm üzerinden bağlanmasına yardımcı olun",
+    "call_full_no_count": "Bu aramada zaten bir aramanın sahip olabileceği en fazla kişi sayısı var.",
+    "call_relaying_for_node": "Aramayı yürüten düğüm üzerinden bağlanan kişiler: {count}"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "Verildi",
       "revoked": "İptal edildi",
       "expired": "Süresi doldu"
+    },
+    "custody_kind": {
+      "label": "Bir kopya tutuyor",
+      "gloss": "Bir düğümün, karmasıyla adlandırılan bir dosyanın baytlarını tuttuğunu bildirmesi."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Makbuz",
+      "gloss": "Bir şeyin teslim edildiğine dair bir kayıt. Makbuzu geri almak teslimatı geri almaz."
+    },
+    "file_version": {
+      "label": "Dosya",
+      "gloss": "Bir grubun görebileceği bir yere yerleştirilen, baytları karmasıyla adlandırılan dosya."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "cross_origin": "Bu arama yalnızca bu cihazın kendi sayfasından açılabilir.",
     "socket_already_open": "Bu arama için zaten açık bir akış bağlantısı var.",
     "share_already_live": "Ekranınızı zaten paylaşıyorsunuz.",
-    "no_share": "Ekranınızı paylaşmıyorsunuz."
+    "no_share": "Ekranınızı paylaşmıyorsunuz.",
+    "full": "Bu aramada zaten 4 kişi var, bir aramanın sahip olabileceği en fazla kişi sayısı bu.",
+    "shaped_only": "Bu cihaz \"Konuşurken her zaman gizle\" olarak ayarlıyken aramalar kullanılamıyor.",
+    "relay_unavailable": "Başkaları için aramaları aktarma bu düğümde henüz kullanılamıyor.",
+    "end": {
+      "hung_up": "Aramadan ayrıldınız.",
+      "revoked": "Artık bu odanın üyesi değilsiniz, bu yüzden arama sona erdi.",
+      "expired": "Bu aramanın odasının süresi doldu, bu yüzden arama sona erdi."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Her iki ağ da bağlantı noktalarını rastgele atıyor, bu yüzden doğrudan bağlantı kurulamıyor.",
+      "punch_no_answer": "Doğrudan bağlantı denendi ve hiçbir yanıt gelmedi.",
+      "punch_one_way": "Doğrudan bağlantı yalnızca tek yönde kuruldu.",
+      "nat_undetermined": "Bağlantı denemesi, ağlardan herhangi biri ölçülmeden sona erdi.",
+      "no_facilitator": "Bu cihazın doğrudan bağlantı için bir buluşma noktası yok ya da cihaz yanıt vermedi.",
+      "refused_by_peer_policy": "Onların cihazı, bu cihazdan gelen doğrudan bağlantıları kabul etmiyor.",
+      "peer_unsupported": "Onların cihazı doğrudan bağlantı kuramıyor.",
+      "budget_refused": "Bu ağların ihtiyaç duyduğu daha zor bağlantı teknikleri şimdilik beklemeye alındı. Kısa süre sonra tekrar deneyin.",
+      "not_trusted": "Bu cihaz, adresini o kişinin cihazıyla paylaşmıyor.",
+      "no_member_could_relay": "Doğrudan bağlantı kurulamadı ve aramadaki başka kimse bunu aktaramadı.",
+      "anonymous_no_direct": "Bu cihaz anonim ve anonim cihazlar asla doğrudan bağlanamaz.",
+      "other": "Bağlantı kurulamadı."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Aramadaki başka bir kişi bunu aktarıyor.",
+      "none_available": "Aramadaki kimse bunu aktarmayı teklif etmedi.",
+      "refused_by_policy": "Bunu yalnızca bir CIRIS genel sunucusu aktarabilirdi, ancak CIRIS genel sunucuları aramaları hiçbir zaman aktarmaz."
+    }
   },
   "decisions": {
     "not_found": "Bu karar artık sizin için açık değil.",

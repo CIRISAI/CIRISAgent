@@ -4236,7 +4236,50 @@
     "constitutional_armed_yes": "A shirye: genesis yana aiki, an zaunar da masu riƙensa, kuma wannan kumburi ya karɓi wannan tushen amincewa, don haka dakatarwar mai riƙe tana kaiwa gare shi.",
     "constitutional_armed_no": "Ba a shirye ba: dakatarwar mai riƙe ba za ta kai wannan kumburi ba.",
     "constitutional_armed_unknown": "Ba a san ko dakatarwar mai riƙe za ta kai wannan kumburi ba: wannan kumburi ba ya ba da rahoton hakan.",
-    "constitutional_holders_count_m_unknown": "Masu riƙe da yarjejeniya {n}. Kumburin bai bayar da rahoton yawan waɗanda dole ne su yarda ba."
+    "constitutional_holders_count_m_unknown": "Masu riƙe da yarjejeniya {n}. Kumburin bai bayar da rahoton yawan waɗanda dole ne su yarda ba.",
+    "call_you": "Ku",
+    "call_connecting": "Ana haɗawa… Hoton ku da sautin ku za su fara da zarar kiran ya kai ga sauran.",
+    "call_not_reached": "Wannan kiran bai isa ga kowa ba. Na'urar wancan mutumin na iya zama ba ta kan layi ba. Kuna iya barinsa ku sake gwadawa daga baya.",
+    "call_path_unnamed": "wani a wannan ɗaki",
+    "call_path_both_nats_random": "Hanyar sadarwarku da hanyar sadarwar {person} ba za su iya haɗawa da juna kai-tsaye ba.",
+    "call_path_punch_no_answer": "Ba a iya isa ga {person} kai-tsaye ba: ƙoƙarin haɗin bai sami amsa ba.",
+    "call_path_punch_one_way": "Ba a iya isa ga {person} kai-tsaye ba: haɗin ya yi aiki ne kawai a hanya guda.",
+    "call_path_nat_undetermined": "Ba a iya isa ga {person} kai-tsaye ba, kuma ba a iya tantance nau'in hanyar sadarwarku gabaɗaya ba.",
+    "call_path_no_facilitator": "Ba a iya isa ga {person} kai-tsaye ba: babu sabar da ta samu don taimakawa wajen kafa haɗin.",
+    "call_path_refused_by_peer_policy": "Kumburin {person} ba ya karɓar haɗin kai-tsaye.",
+    "call_path_peer_unsupported": "Haɗin kai-tsaye zuwa {person} ba zai yiwu ba: manhajarsu ba ta tallafa wa hakan ba.",
+    "call_path_budget_refused": "Yawan ƙoƙarin haɗi ya yi yawa a yanzu. Ku sake gwadawa a cikin dakika {seconds}.",
+    "call_path_budget_refused_shortly": "Yawan ƙoƙarin haɗi ya yi yawa a yanzu. Ku sake gwadawa ba da daɗewa ba.",
+    "call_path_not_trusted": "Ana amfani da ƙarin hanyoyin haɗi kawai tare da mutanen da kuka amince da su, don haka ba a gwada su don {person} ba.",
+    "call_path_other": "Ba a iya haɗawa da {person} ba.",
+    "call_relay_refused_by_policy": "Ba a tura kiraye-kiraye ta sabobin jama'a na CIRIS ba.",
+    "call_relay_none_available": "Babu relay da ake samu a yanzu.",
+    "call_path_networks": "Hanyar sadarwarku: {nat}. Hanyar sadarwar {person} (kamar yadda suka bayar da rahoto): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Hanyar sadarwarku: {nat}. Ba a san nau'in hanyar sadarwar {person} ba.",
+    "call_nat_open": "a buɗe (babu NAT)",
+    "call_nat_full_cone": "full-cone NAT",
+    "call_nat_restricted": "restricted NAT",
+    "call_nat_port_restricted": "port-restricted NAT",
+    "call_nat_symmetric": "symmetric NAT",
+    "call_nat_unknown": "ba a sani ba",
+    "call_path_port_open": "Akwai port a buɗe a kan router ɗinku (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Hanyar sadarwarku tana toshe kiraye-kirayen kai-tsaye. Ku gwada wata hanyar sadarwa dabam, misali Wi-Fi maimakon bayanan wayar hannu.",
+    "call_path_action_peer": "Hanyar sadarwar {person} tana toshe kiraye-kirayen kai-tsaye.",
+    "call_path_try_again": "Sake gwadawa",
+    "call_path_details": "Bayanai",
+    "call_path_details_hide": "Ɓoye bayanai",
+    "call_path_restored": "An haɗu da {person} kai-tsaye.",
+    "call_path_restored_lan": "An haɗu da {person} kai-tsaye, ta hanyar sadarwarku ta gida.",
+    "call_path_no_member_could_relay": "Ba a iya isa ga {person} kai-tsaye ba, kuma babu wani a cikin kiran da zai iya wucewa da haɗin.",
+    "call_path_anonymous_no_direct": "Wannan na'ura tana cikin yanayin mara-suna, wanda ba ya haɗuwa kai-tsaye, don haka ba za ta iya isa ga {person} kai-tsaye ba.",
+    "call_path_restored_relay": "An haɗu da {person} ta hanyar {relayer}.",
+    "call_path_relayer_unnamed": "wani memba",
+    "call_relay_switch": "Taimaki wasu a cikin wannan kiran su haɗu ta wannan na'ura",
+    "call_relay_metered_note": "A kashe take a kan bayanan waya sai dai idan kun kunna shi: wucewa da kiraye-kiraye yana amfani da bayananku da baturin ku.",
+    "call_relaying_for": "Mutanen da suka haɗu ta wannan na'ura: {count}",
+    "call_relay_switch_node": "Taimaki wasu a cikin wannan kiran su haɗu ta kumburin da ke gudanar da kiran",
+    "call_full_no_count": "Wannan kiran yana da mafi yawan mutanen da kira zai iya samu tuni.",
+    "call_relaying_for_node": "Mutanen da suka haɗu ta kumburin da ke gudanar da kiran: {count}"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -6280,6 +6323,18 @@
       "granted": "An ba da izini",
       "revoked": "An soke",
       "expired": "Ya ƙare"
+    },
+    "custody_kind": {
+      "label": "Yana riƙe da kwafi",
+      "gloss": "Kumburin da ke cewa yana riƙe da bytes na fayil, wanda hash ɗinsu ya ambace shi."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Rasit",
+      "gloss": "Rikodin da ke nuna cewa an isar da wani abu. Sokewar rasit ba ya soke isar da shi ba."
+    },
+    "file_version": {
+      "label": "Fayil",
+      "gloss": "Fayil da aka sanya a inda ƙungiya za ta iya ganinsa, bytes ɗinsa kuwa hash ɗinsu ya ambace su."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Bidiyo da raba allo suna aiki ne kawai a kiraye-kiraye tsakanin mutane biyu a yanzu. Wannan kiran yana da fiye da haka, don haka murya ne kawai. Idan kyamararku a kunne take, za ta sake fara aikawa idan kiran ya koma mutane biyu.",
     "relay_canonical_audio_only": "Bidiyonsu ba zai iya isa gare ku a yanzu ba: hanyar da ke tsakaninku tana ɗauke da sauti kawai. Har yanzu kuna iya jin su.",
     "share_already_live": "Kuna raba allon ku tuni.",
-    "no_share": "Ba ku raba allon ku ba."
+    "no_share": "Ba ku raba allon ku ba.",
+    "full": "Wannan kiran yana da mutane 4 tuni, mafi yawan da kira zai iya samu.",
+    "shaped_only": "Ba a iya yin kira ba muddin an saita wannan na'urar zuwa \"Koyaushe ɓoye yayin da nake magana\".",
+    "relay_unavailable": "Wucewa da kiraye-kiraye na wasu ba ya samuwa a wannan node tukuna.",
+    "end": {
+      "hung_up": "Kun bar kiran.",
+      "revoked": "Ba ku ƙara zama memba na wannan ɗaki ba, don haka kiran ya ƙare.",
+      "expired": "Ɗakin wannan kiran ya kai ƙarshe, don haka kiran ya ƙare."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Dukkan hanyoyin sadarwar biyu suna ba da tashoshi bisa dama, don haka ba a iya yin haɗi kai-tsaye ba.",
+      "punch_no_answer": "An gwada haɗi kai-tsaye amma babu wani abu da ya dawo.",
+      "punch_one_way": "Haɗi kai-tsaye ya wuce ta hanya ɗaya kawai.",
+      "nat_undetermined": "Ƙoƙarin haɗin ya ƙare kafin a iya auna ko wace hanyar sadarwa.",
+      "no_facilitator": "Wannan na'ura ba ta da wurin haɗuwa don haɗi kai-tsaye, ko kuwa ba ta amsa ba.",
+      "refused_by_peer_policy": "Na'urarsu ba ta karɓar haɗi kai-tsaye daga wannan ba.",
+      "peer_unsupported": "Na'urarsu ba za ta iya yin haɗi kai-tsaye ba.",
+      "budget_refused": "An dakatar da dabarun haɗi masu wahala da waɗannan hanyoyin sadarwa ke buƙata a yanzu. Ku sake gwadawa ba da daɗewa ba.",
+      "not_trusted": "Wannan na'ura ba ta raba adireshinta da na'urar wannan mutumin ba.",
+      "no_member_could_relay": "Babu haɗi kai-tsaye, kuma babu wani a cikin kiran da zai iya wucewa da shi.",
+      "anonymous_no_direct": "Wannan na'ura mara-suna ce, kuma na'urorin mara-suna ba sa haɗuwa kai-tsaye.",
+      "other": "Ba a iya yin haɗin ba."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Wani a cikin kiran yana wucewa da shi.",
+      "none_available": "Babu wanda a cikin kiran ya bayar da kansa don wucewa da shi.",
+      "refused_by_policy": "Sai sabobin jama'a na CIRIS kaɗai za su iya wucewa da shi, kuma sabobin jama'a na CIRIS ba sa taɓa wucewa da kiraye-kiraye."
+    }
   },
   "decisions": {
     "not_found": "Wannan shawarar ba ta ƙara buɗewa gare ku ba.",

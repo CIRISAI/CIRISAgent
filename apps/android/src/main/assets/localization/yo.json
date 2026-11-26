@@ -4236,7 +4236,50 @@
     "accord_kind_confirmed": "Ìdáwọ́dúró tí a fọwọ́sí — fọwọ́sí ìdáwọ́dúró tí ó wà ní agbára",
     "accord_binding_confirmed": "a ti fọwọ́sí · ọ̀pọ̀ jùlọ dájúdájú ti àwọn olùdì ti fọwọ́sí ìdáwọ́dúró tí a dárúkọ tí ó ti wà ní agbára. Kì í ṣe ìdáwọ́dúró tuntun, kì í sì í ṣe ìkéde.",
     "chat_file_added": "{who} fi {name} kún yàrá náà",
-    "chat_file_added_you": "Ìwọ fi {name} kún yàrá náà"
+    "chat_file_added_you": "Ìwọ fi {name} kún yàrá náà",
+    "call_you": "Ìwọ",
+    "call_connecting": "Ń sopọ̀… Àwòrán àti ohùn rẹ yóò bẹ̀rẹ̀ ní kété tí ìpè náà bá dé ọ̀dọ̀ àwọn yòókù.",
+    "call_not_reached": "Ìpè yìí kò tíì dé ọ̀dọ̀ ẹnikẹ́ni. Ó ṣeé ṣe kí ẹ̀rọ ẹni mìíràn náà má sopọ̀ mọ́ ayélujára. O lè kúrò kí o sì tún gbìyànjú nígbà mìíràn.",
+    "call_path_unnamed": "ẹnìkan nínú yàrá yìí",
+    "call_path_both_nats_random": "Nẹ́tiwọ́kì rẹ àti nẹ́tiwọ́kì {person} kò lè sopọ̀ mọ́ ara wọn tààrà.",
+    "call_path_punch_no_answer": "A kò lè dé ọ̀dọ̀ {person} tààrà: ìgbìyànjú ìsopọ̀ kò rí èsì kankan.",
+    "call_path_punch_one_way": "A kò lè dé ọ̀dọ̀ {person} tààrà: ìsopọ̀ náà ṣiṣẹ́ ní ìhà kan ṣoṣo.",
+    "call_path_nat_undetermined": "A kò lè dé ọ̀dọ̀ {person} tààrà, irú nẹ́tiwọ́kì rẹ kò sì lè yè kedere ní kíkún.",
+    "call_path_no_facilitator": "A kò lè dé ọ̀dọ̀ {person} tààrà: kò sí sáfà kan tí ó wà láti ràn wá lọ́wọ́ láti ṣètò ìsopọ̀ náà.",
+    "call_path_refused_by_peer_policy": "Nódù {person} kò gba àwọn ìsopọ̀ tààrà.",
+    "call_path_peer_unsupported": "Ìsopọ̀ tààrà sí {person} kò ṣeé ṣe: ohun èlò wọn kò ṣe àtìlẹ́yìn fún un.",
+    "call_path_budget_refused": "Ìgbìyànjú ìsopọ̀ ti pọ̀ jù lọ́wọ́lọ́wọ́. Gbìyànjú lẹ́ẹ̀kansi ní {seconds} s.",
+    "call_path_budget_refused_shortly": "Ìgbìyànjú ìsopọ̀ ti pọ̀ jù lọ́wọ́lọ́wọ́. Gbìyànjú lẹ́ẹ̀kansi láìpẹ́.",
+    "call_path_not_trusted": "Àwọn ọ̀nà ìsopọ̀ àfikún ni a ń lò pẹ̀lú àwọn ènìyàn tí o gbẹ́kẹ̀lé nìkan, nítorí náà a kò gbìyànjú wọn fún {person}.",
+    "call_path_other": "A kò lè sopọ̀ mọ́ {person}.",
+    "call_relay_refused_by_policy": "Àwọn ìpè kò kọjá nípa àwọn sáfà gbangba CIRIS.",
+    "call_relay_none_available": "Kò sí rẹ́lè kankan tí ó wà lọ́wọ́lọ́wọ́.",
+    "call_path_networks": "Nẹ́tiwọ́kì rẹ: {nat}. Nẹ́tiwọ́kì {person} (gẹ́gẹ́ bí wọ́n ṣe ròyìn rẹ̀): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Nẹ́tiwọ́kì rẹ: {nat}. A kò mọ irú nẹ́tiwọ́kì {person}.",
+    "call_nat_open": "ṣíṣí (láìsí NAT)",
+    "call_nat_full_cone": "NAT kónù-kíkún",
+    "call_nat_restricted": "NAT tí a dín kù",
+    "call_nat_port_restricted": "NAT tí a dín sí pọ́tù",
+    "call_nat_symmetric": "NAT símétíríìkì",
+    "call_nat_unknown": "aimọ̀",
+    "call_path_port_open": "Pọ́tù kan ṣí sílẹ̀ lórí rútà rẹ (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Nẹ́tiwọ́kì rẹ ń dí àwọn ìpè tààrà lọ́nà. Gbìyànjú nẹ́tiwọ́kì mìíràn, bí àpẹẹrẹ Wi-Fi dípò dátà alágbèéká.",
+    "call_path_action_peer": "Nẹ́tiwọ́kì {person} ń dí àwọn ìpè tààrà lọ́nà.",
+    "call_path_try_again": "Gbìyànjú lẹ́ẹ̀kansi",
+    "call_path_details": "Àlàyé",
+    "call_path_details_hide": "Fi àlàyé pamọ́",
+    "call_path_restored": "Ti sopọ̀ mọ́ {person} tààrà.",
+    "call_path_restored_lan": "Ti sopọ̀ mọ́ {person} tààrà, lórí nẹ́tiwọ́kì ìbílẹ̀ rẹ.",
+    "call_path_no_member_could_relay": "A kò lè dé ọ̀dọ̀ {person} tààrà, kò sì sí ẹlòmíràn nínú ìpè náà tí ó lè gbé ìsopọ̀ náà kọjá.",
+    "call_path_anonymous_no_direct": "Ẹ̀rọ yìí wà ní ipò aláìlórúkọ, èyí tí kì í sopọ̀ tààrà rárá, nítorí náà kò lè dé ọ̀dọ̀ {person} tààrà.",
+    "call_path_restored_relay": "Ó sopọ̀ mọ́ {person} nípasẹ̀ {relayer}.",
+    "call_path_relayer_unnamed": "ọmọ ẹgbẹ́ mìíràn",
+    "call_relay_switch": "Ran àwọn ẹlòmíràn nínú ìpè yìí lọ́wọ́ láti sopọ̀ nípasẹ̀ ẹ̀rọ yìí",
+    "call_relay_metered_note": "Ó wà ní pípa lórí dátà mobile àyàfi bí o bá ṣí i: gbígbé àwọn ìpè kọjá ń lo dátà àti bátìrì rẹ.",
+    "call_relaying_for": "Àwọn ènìyàn tí wọ́n sopọ̀ nípasẹ̀ ẹ̀rọ yìí: {count}",
+    "call_relay_switch_node": "Ran àwọn ẹlòmíràn nínú ìpè yìí lọ́wọ́ láti sopọ̀ nípasẹ̀ nódù tí ń ṣiṣẹ́ ìpè náà",
+    "call_full_no_count": "Ìpè yìí ti ní iye ènìyàn tí ó pọ̀ jùlọ tí ìpè kan lè ní tẹ́lẹ̀.",
+    "call_relaying_for_node": "Àwọn ènìyàn tí wọ́n sopọ̀ nípasẹ̀ nódù tí ń ṣiṣẹ́ ìpè náà: {count}"
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",
@@ -6280,6 +6323,18 @@
       "granted": "Ti yọ̀nda",
       "revoked": "Ti fagilé",
       "expired": "Ti parí"
+    },
+    "custody_kind": {
+      "label": "Ní ẹ̀dà kan",
+      "gloss": "Nóòdù kan tí ń sọ pé òun ní àwọn byte fún fáìlì kan, tí a sọ lórúkọ nípasẹ̀ hash wọn."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Ìwé-ẹ̀rí",
+      "gloss": "Àkọsílẹ̀ pé a ti fi nǹkan jíṣẹ́. Píparẹ́ ìwé-ẹ̀rí kò ní pa ìfijíṣẹ́ náà rẹ́."
+    },
+    "file_version": {
+      "label": "Fáìlì",
+      "gloss": "Fáìlì kan tí a gbé sí ibi tí àwùjọ kan lè rí i, tí a sọ orúkọ àwọn byte rẹ̀ nípasẹ̀ hash wọn."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Fídíò àti pínpín ojú-ìwé ń ṣiṣẹ́ nínú àwọn ìpè láàrin ènìyàn méjì fún ìsinsìnyí. Ìpè yìí ní ju bẹ́ẹ̀ lọ, nítorí náà ohùn nìkan ni. Bí kámẹ́rà rẹ bá wà ní títan, yóò tún bẹ̀rẹ̀ sí í fi ránṣẹ́ nígbà tí ìpè náà bá padà sí ènìyàn méjì.",
     "relay_canonical_audio_only": "Fídíò wọn kò lè dé ọ̀dọ̀ rẹ ní ìsinsìnyí: ọ̀nà tí ó wà láàrin yín gbé ohùn nìkan. O ṣì lè gbọ́ wọn.",
     "share_already_live": "O ti ń pín ojú ìbòjú rẹ tẹ́lẹ̀.",
-    "no_share": "O kò pín ojú ìbòjú rẹ lọ́wọ́lọ́wọ́."
+    "no_share": "O kò pín ojú ìbòjú rẹ lọ́wọ́lọ́wọ́.",
+    "full": "Ìpè yìí ti ní ènìyàn 4 tẹ́lẹ̀, iye tí ó pọ̀ jùlọ tí ìpè kan lè ní.",
+    "shaped_only": "A kò lè ṣe àwọn ìpè nígbà tí a bá ti ṣètò ẹ̀rọ yìí sí \"Fi ara pamọ́ nígbàkigbà tí mo bá ń sọ̀rọ̀\".",
+    "relay_unavailable": "Gbígbé àwọn ìpè kọjá fún àwọn ẹlòmíràn kò tíì wà lórí nóòdù yìí.",
+    "end": {
+      "hung_up": "O fi ìpè náà sílẹ̀.",
+      "revoked": "O kò jẹ́ ọmọ ẹgbẹ́ yàrá yìí mọ́, nítorí náà ìpè náà parí.",
+      "expired": "Yàrá ìpè yìí ti parí àkókò rẹ̀, nítorí náà ìpè náà parí."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Nẹ́tíwọ̀ọ̀kì méjèèjì ń yan port láìròtẹ́lẹ̀, nítorí náà a kò lè ṣe ìsopọ̀ tààrà.",
+      "punch_no_answer": "A gbìyànjú ìsopọ̀ tààrà, kò sì sí èsì tí ó padà wá.",
+      "punch_one_way": "Ìsopọ̀ tààrà já kọjá ní ọ̀nà kan ṣoṣo.",
+      "nat_undetermined": "Ìgbìyànjú ìsopọ̀ parí kí a tó lè díwọ̀n ọ̀kankan nínú àwọn nẹ́tíwọ̀ọ̀kì méjèèjì.",
+      "no_facilitator": "Ẹ̀rọ yìí kò ní ibi ìpàdé fún ìsopọ̀ tààrà, tàbí kò dáhùn.",
+      "refused_by_peer_policy": "Ẹ̀rọ wọn kò gba àwọn ìsopọ̀ tààrà láti ọ̀dọ̀ èyí.",
+      "peer_unsupported": "Ẹ̀rọ wọn kò lè ṣe ìsopọ̀ tààrà.",
+      "budget_refused": "Àwọn ọ̀nà ìsopọ̀ tó le jù tí àwọn nẹ́tíwọ̀ọ̀kì wọ̀nyí nílò ni a ti dá dúró fún ìsinsìnyí. Gbìyànjú lẹ́ẹ̀kansi láìpẹ́.",
+      "not_trusted": "Ẹ̀rọ yìí kò pín àdírẹ́sì rẹ̀ pẹ̀lú ẹ̀rọ ẹni yẹn.",
+      "no_member_could_relay": "Kò sí ìsopọ̀ tààrà, kò sì sí ẹlòmíràn nínú ìpè náà tí ó lè gbé e kọjá.",
+      "anonymous_no_direct": "Ẹ̀rọ yìí wà ní ipò aláìlórúkọ, àwọn ẹ̀rọ aláìlórúkọ kì í sì í sopọ̀ tààrà rárá.",
+      "other": "A kò lè ṣe ìsopọ̀ náà."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Ẹlòmíràn nínú ìpè náà ń gbé e kọjá.",
+      "none_available": "Kò sí ẹnikẹ́ni nínú ìpè náà tí ó fi ara rẹ̀ lélẹ̀ láti gbé e kọjá.",
+      "refused_by_policy": "Sáfà gbangba CIRIS kan ṣoṣo ni ó lè gbé e kọjá, àwọn sáfà gbangba CIRIS kò sì gbé àwọn ìpè kọjá rárá."
+    }
   },
   "decisions": {
     "not_found": "Ìpinnu yẹn kò sí ní ṣíṣí fún ọ mọ́.",

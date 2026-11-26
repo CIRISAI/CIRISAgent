@@ -4069,7 +4069,50 @@
     "wa_identity_profile_mismatch": "L'identità di questo agente non corrisponde al proprio modello approvato. Nessuna modifica all'identità verrà applicata finché la questione non sarà risolta.",
     "wa_identity_profile_contested": "L'identità di questo agente è contestata. Nessuna modifica all'identità verrà applicata finché la questione non sarà risolta.",
     "wa_identity_profile_unknown": "Questo agente ha segnalato uno stato dell'identità che questa app non riconosce.",
-    "wa_identity_open_base_link": "Apri la richiesta di collegamento di base"
+    "wa_identity_open_base_link": "Apri la richiesta di collegamento di base",
+    "call_you": "Tu",
+    "call_connecting": "Connessione in corso… La tua immagine e il tuo audio iniziano quando la chiamata raggiunge gli altri.",
+    "call_not_reached": "Questa chiamata non ha raggiunto nessuno. Il dispositivo dell'altra persona potrebbe essere offline. Puoi uscire e riprovare più tardi.",
+    "call_path_unnamed": "qualcuno in questa stanza",
+    "call_path_both_nats_random": "La tua rete e la rete di {person} non riescono a connettersi direttamente tra loro.",
+    "call_path_punch_no_answer": "Impossibile raggiungere {person} direttamente: il tentativo di connessione non ha ricevuto risposta.",
+    "call_path_punch_one_way": "Impossibile raggiungere {person} direttamente: la connessione ha funzionato solo in una direzione.",
+    "call_path_nat_undetermined": "Impossibile raggiungere {person} direttamente, e non è stato possibile determinare completamente il tipo della tua rete.",
+    "call_path_no_facilitator": "Impossibile raggiungere {person} direttamente: nessun server era disponibile per aiutare a stabilire la connessione.",
+    "call_path_refused_by_peer_policy": "Le connessioni dirette non sono accettate dal nodo di {person}.",
+    "call_path_peer_unsupported": "Una connessione diretta a {person} non è possibile: la sua app non la supporta.",
+    "call_path_budget_refused": "Troppi tentativi di connessione in questo momento. Riprova tra {seconds} s.",
+    "call_path_budget_refused_shortly": "Troppi tentativi di connessione in questo momento. Riprova a breve.",
+    "call_path_not_trusted": "I metodi di connessione aggiuntivi vengono utilizzati solo con le persone di cui ti fidi, quindi non sono stati provati per {person}.",
+    "call_path_other": "Impossibile connettersi a {person}.",
+    "call_relay_refused_by_policy": "Le chiamate non vengono inoltrate tramite i server pubblici CIRIS.",
+    "call_relay_none_available": "Nessun relay è disponibile in questo momento.",
+    "call_path_networks": "La tua rete: {nat}. La rete di {person} (come riportato da tale persona): {peer_nat}.",
+    "call_path_networks_peer_unknown": "La tua rete: {nat}. Il tipo di rete di {person} non è noto.",
+    "call_nat_open": "aperto (nessun NAT)",
+    "call_nat_full_cone": "NAT a cono pieno",
+    "call_nat_restricted": "NAT con restrizione",
+    "call_nat_port_restricted": "NAT con restrizione di porta",
+    "call_nat_symmetric": "NAT simmetrico",
+    "call_nat_unknown": "sconosciuto",
+    "call_path_port_open": "Una porta è aperta sul tuo router (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "La tua rete blocca le chiamate dirette. Prova una rete diversa, ad esempio il Wi-Fi invece dei dati mobili.",
+    "call_path_action_peer": "La rete di {person} blocca le chiamate dirette.",
+    "call_path_try_again": "Riprova",
+    "call_path_details": "Dettagli",
+    "call_path_details_hide": "Nascondi dettagli",
+    "call_path_restored": "Connesso direttamente a {person}.",
+    "call_path_restored_lan": "Connesso direttamente a {person}, tramite la tua rete locale.",
+    "call_path_no_member_could_relay": "Impossibile raggiungere {person} direttamente, e nessun altro nella chiamata ha potuto trasmettere la connessione.",
+    "call_path_anonymous_no_direct": "Questo dispositivo è in modalità anonima, che non si connette mai direttamente, quindi non può raggiungere {person} direttamente.",
+    "call_path_restored_relay": "Connesso a {person} tramite {relayer}.",
+    "call_path_relayer_unnamed": "un altro membro",
+    "call_relay_switch": "Aiuta gli altri in questa chiamata a connettersi tramite questo dispositivo",
+    "call_relay_metered_note": "Disattivato sui dati mobili a meno che tu non lo attivi: trasmettere le chiamate consuma i tuoi dati e la batteria.",
+    "call_relaying_for": "Persone connesse tramite questo dispositivo: {count}",
+    "call_relay_switch_node": "Aiuta gli altri in questa chiamata a connettersi tramite il nodo che gestisce la chiamata",
+    "call_full_no_count": "Questa chiamata ha già il numero massimo di persone che una chiamata può avere.",
+    "call_relaying_for_node": "Persone connesse tramite il nodo che gestisce la chiamata: {count}"
   },
   "prompts": {
     "dma": {
@@ -6307,6 +6350,18 @@
       "granted": "Concesso",
       "revoked": "Revocato",
       "expired": "Scaduto"
+    },
+    "custody_kind": {
+      "label": "Detiene una copia",
+      "gloss": "Un nodo che dichiara di detenere i byte di un file, identificato dal loro hash."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Ricevuta",
+      "gloss": "Un record che attesta che qualcosa è stato consegnato. Annullare la ricevuta non annulla la consegna."
+    },
+    "file_version": {
+      "label": "File",
+      "gloss": "Un file collocato dove un gruppo può vederlo, i cui byte sono identificati dal loro hash."
     }
   },
   "drive": {
@@ -6698,7 +6753,34 @@
     "video_two_people_only": "Per ora, video e condivisione dello schermo funzionano nelle chiamate tra due persone. Questa chiamata ne ha di più, quindi è solo vocale. Se la tua fotocamera è attiva, riprenderà a trasmettere quando la chiamata tornerà a due persone.",
     "relay_canonical_audio_only": "Il loro video non può raggiungerti in questo momento: il percorso tra voi trasporta solo l'audio. Puoi comunque sentirli.",
     "share_already_live": "Stai già condividendo lo schermo.",
-    "no_share": "Non stai condividendo lo schermo."
+    "no_share": "Non stai condividendo lo schermo.",
+    "full": "Questa chiamata ha già 4 persone, il massimo che una chiamata può avere.",
+    "shaped_only": "Le chiamate non sono disponibili mentre questo dispositivo è impostato su \"Nascondi sempre quando parlo\".",
+    "relay_unavailable": "La trasmissione delle chiamate per altri non è ancora disponibile su questo nodo.",
+    "end": {
+      "hung_up": "Hai lasciato la chiamata.",
+      "revoked": "Non sei più un membro di questa stanza, quindi la chiamata è terminata.",
+      "expired": "La stanza di questa chiamata è scaduta, quindi la chiamata è terminata."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Entrambe le reti assegnano le porte in modo casuale, quindi non è possibile stabilire una connessione diretta.",
+      "punch_no_answer": "È stata tentata una connessione diretta e non è arrivata alcuna risposta.",
+      "punch_one_way": "Una connessione diretta è riuscita in una sola direzione.",
+      "nat_undetermined": "Il tentativo di connessione è terminato prima che fosse possibile misurare una delle due reti.",
+      "no_facilitator": "Questo dispositivo non ha un punto d'incontro per una connessione diretta, oppure non ha risposto.",
+      "refused_by_peer_policy": "Il loro dispositivo non accetta connessioni dirette da questo.",
+      "peer_unsupported": "Il loro dispositivo non può stabilire una connessione diretta.",
+      "budget_refused": "Le tecniche di connessione più complesse richieste da queste reti sono momentaneamente non disponibili. Riprova a breve.",
+      "not_trusted": "Questo dispositivo non condivide il proprio indirizzo con il dispositivo di quella persona.",
+      "no_member_could_relay": "Nessuna connessione diretta, e nessun altro nella chiamata ha potuto trasmetterla.",
+      "anonymous_no_direct": "Questo dispositivo è anonimo, e i dispositivi anonimi non si connettono mai direttamente.",
+      "other": "Non è stato possibile stabilire la connessione."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Un'altra persona nella chiamata la sta trasmettendo.",
+      "none_available": "Nessuno nella chiamata si è offerto di trasmetterla.",
+      "refused_by_policy": "Solo un server pubblico CIRIS avrebbe potuto trasmetterla, e i server pubblici CIRIS non inoltrano mai le chiamate."
+    }
   },
   "decisions": {
     "not_found": "Questa decisione non è più aperta per te.",

@@ -39,7 +39,9 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         self._uptime_requests = 0
 
         # NTP drift monitoring
-        self._ntp_offset_ms = 0.0  # Current offset in milliseconds
+        # The last MEASURED NTP offset (server - local) in milliseconds; None until NTP has answered. Never
+        # simulated: a missing measurement is reported as absent, not invented.
+        self._ntp_offset_ms: Optional[float] = None
         self._ntp_last_check: Optional[datetime] = None  # Last time we checked NTP
         self._ntp_check_interval = 3600  # Check every hour
         self._ntp_check_count = 0
@@ -103,7 +105,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
                     self._time_requests + self._iso_requests + self._timestamp_requests + self._uptime_requests
                 ),
                 "days_running": self.get_uptime() / 86400.0,  # Convert to days
-                "time_drift_ms": self._ntp_offset_ms,  # Real NTP drift in milliseconds
+                **self._drift_metrics(),
                 "ntp_check_count": float(self._ntp_check_count),
                 "ntp_failures": float(self._ntp_failures),
                 "timezone_offset": 0.0,  # Always 0 for UTC
@@ -172,8 +174,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
             # Try to import ntplib (optional dependency)
             import ntplib
         except ImportError:
-            # ntplib not available, use simulated drift based on system clock precision
-            self._simulate_drift()
+            # ntplib not available: no measurement (the last real one, if any, stands)
             return
 
         c = ntplib.NTPClient()
@@ -193,38 +194,30 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         # All servers failed
         self._ntp_failures += 1
         logger.warning("Failed to check NTP drift from all servers")
-        # Fall back to simulated drift
-        self._simulate_drift()
+        # No new measurement: the last real one, if any, stands. Nothing is simulated.
 
-    def _simulate_drift(self) -> None:
-        """Simulate realistic drift when NTP is not available."""
-        # Typical quartz crystal drift is 20-100 ppm (parts per million)
-        # That's about 1.7-8.6 seconds per day
-        # We'll simulate a small drift based on uptime
-        uptime_hours = self.get_uptime() / 3600
-        # Assume 50 ppm drift rate (4.3 seconds/day, 0.18 seconds/hour)
-        drift_seconds = uptime_hours * 0.18
-        self._ntp_offset_ms = drift_seconds * 1000
+    def _drift_metrics(self) -> Dict[str, float]:
+        """``time_drift_measured`` always; ``time_drift_ms`` only once NTP has actually measured it."""
+        if self._ntp_offset_ms is None:
+            return {"time_drift_measured": 0.0}
+        return {"time_drift_measured": 1.0, "time_drift_ms": self._ntp_offset_ms}
 
-    def get_ntp_offset(self) -> float:
-        """Get current NTP offset in seconds.
+    def get_ntp_offset(self) -> Optional[float]:
+        """The last measured NTP offset in seconds, or ``None`` when NTP has never answered.
 
-        Returns:
-            float: Time offset in seconds (positive means local clock is ahead)
+        ntplib's convention: server time minus local time, so a POSITIVE offset means the local clock is BEHIND.
         """
         self._check_ntp_drift_if_needed()
-        return self._ntp_offset_ms / 1000.0
+        return None if self._ntp_offset_ms is None else self._ntp_offset_ms / 1000.0
 
     def get_adjusted_time(self) -> datetime:
-        """Get NTP-adjusted current time.
-
-        Returns:
-            datetime: Current time adjusted for NTP offset
-        """
+        """The current time corrected by the measured NTP offset (``now() + offset``); ``now()`` when unmeasured."""
         from datetime import timedelta
 
         offset_seconds = self.get_ntp_offset()
-        return self.now() - timedelta(seconds=offset_seconds)
+        if offset_seconds is None:
+            return self.now()
+        return self.now() + timedelta(seconds=offset_seconds)
 
     async def get_metrics(self) -> Dict[str, float]:
         """
@@ -239,9 +232,8 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         # Sync operations = NTP checks performed
         sync_operations = self._ntp_check_count
 
-        # Current clock drift in milliseconds (from NTP)
+        # Current clock drift in milliseconds, only when NTP measured it
         self._check_ntp_drift_if_needed()
-        drift_ms = self._ntp_offset_ms
 
         # Service uptime in seconds
         uptime_seconds = self.get_uptime()
@@ -251,7 +243,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
             {
                 "time_queries_total": float(total_queries),
                 "time_sync_operations": float(sync_operations),
-                "time_drift_ms": drift_ms,
+                **self._drift_metrics(),
                 "time_uptime_seconds": uptime_seconds,
             }
         )

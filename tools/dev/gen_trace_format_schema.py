@@ -1,4 +1,8 @@
-"""Regenerate ciris_adapters/ciris_accord_metrics/schemas/trace_format_v3_1_0.json from the enforced egress schema.
+"""Regenerate ciris_adapters/ciris_accord_metrics/schemas/trace_format_v3_1_1.json from the enforced egress schema.
+
+The current label is 3.1.1 (2.23.2: the context_manifest's ``facts``). Every definition is closed, so a member an
+earlier file lacks needs a new label: an admitter selects the pinned schema by it (CC 3.1.5). Shipped files are
+frozen: trace_format_v3_1_0.json is the v2.23.0 bytes, pinned by sha256, and is never regenerated.
 
 The LlmCallData and ContextManifest definitions (and every event's egress_alterations member) come from
 egress_schema.json_schema_for, so the published trace format is what egress enforces. The envelope comes from the
@@ -20,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 
 SCHEMAS = ROOT / "ciris_adapters" / "ciris_accord_metrics" / "schemas"
 SOURCE = SCHEMAS / "trace_format_v2_7_0.json"
-TARGET = SCHEMAS / "trace_format_v3_1_0.json"
+TARGET = SCHEMAS / "trace_format_v3_1_1.json"
 
 
 def build() -> dict:
@@ -28,17 +32,17 @@ def build() -> dict:
     from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
     d = json.loads(SOURCE.read_text(encoding="utf-8"))
-    d["$id"] = "https://ciris.ai/schemas/trace_format_v3.1.0.json"
-    d["title"] = "CIRIS Reasoning Trace v3.1.0"
+    d["$id"] = "https://ciris.ai/schemas/trace_format_v3.1.1.json"
+    d["title"] = "CIRIS Reasoning Trace v3.1.1"
     d["description"] = (
         "Complete reasoning trace from the CIRIS H3ERE pipeline (FSD/TRACE_WIRE_FORMAT.md). 3.1.0 adds the "
-        "LLM_CALL context_manifest member (§5.10.1). Stamped by lens-core at seal time from server 0.6 / persist "
+        "LLM_CALL context_manifest member (§5.10.1); 3.1.1 adds its `facts`. Stamped by lens-core at seal time from server 0.6 / persist "
         "v62.0; the LlmCallData and ContextManifest definitions are generated from the egress schema "
         "(tools/dev/gen_trace_format_schema.py) and compared to it by test."
     )
     d["properties"]["trace_schema_version"] = {
         "type": "string",
-        "const": "3.1.0",
+        "const": "3.1.1",
         "description": "Stamped by lens-core at seal time",
     }
     components = d["properties"]["components"]

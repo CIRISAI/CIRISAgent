@@ -16,6 +16,8 @@ from typing import Any, Optional, Tuple
 from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
+
+from ciris_engine.logic.context.room_audience import node_room, stamp_room
 from pydantic import ValidationError
 
 from ciris_engine.logic.buses.bus_manager import BusManager
@@ -230,7 +232,8 @@ class TestMemorizeHandler:
         # Verify
         assert follow_up_id is not None
         assert mock_memory_bus.memorize.called
-        assert mock_memory_bus.memorize.call_args.kwargs["node"] == node
+        stored = mock_memory_bus.memorize.call_args.kwargs["node"]
+        assert node_room(stored) and stored == stamp_room(node, node_room(stored))  # stamped with its room
         assert mock_memory_bus.memorize.call_args.kwargs["handler_name"] == "MemorizeHandler"
 
         # Verify thought status updated

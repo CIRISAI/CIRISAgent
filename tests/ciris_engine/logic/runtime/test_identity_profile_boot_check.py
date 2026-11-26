@@ -40,3 +40,24 @@ async def test_a_failed_boot_check_never_fails_boot(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(system_snapshot_helpers, "_extract_agent_identity", boom)
     await _check(object())  # no raise
     assert any("boot check failed" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_boot_registers_the_re_check_a_recorded_base_link_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A base link recorded later re-runs the same identity load (RATCHET run 44854632378)."""
+    from ciris_engine.logic.context import identity_profile as ip
+
+    seen: List[object] = []
+    memory = object()
+
+    async def extract(service: object) -> Any:
+        seen.append(service)
+        return SimpleNamespace(profile=None), None
+
+    monkeypatch.setattr(system_snapshot_helpers, "_extract_agent_identity", extract)
+    try:
+        await _check(memory)
+        assert await ip.refresh_identity_profile() is True
+        assert seen == [memory, memory]
+    finally:
+        ip.set_profile_refresher(None)

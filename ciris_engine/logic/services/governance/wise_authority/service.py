@@ -1063,6 +1063,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         assert time_service is not None  # injected at construction (required argument)
         add_graph_node(node, time_service)
         logger.info("Base link of deferral %s recorded: signed row %s, digest %s", deferral_id, row_id, digest)
+        from ciris_engine.logic.context.identity_profile import refresh_identity_profile
+
+        await refresh_identity_profile()  # anchored now, not on the next identity load
         return {"status": "recorded", "amendment_attestation_id": row_id}
 
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:

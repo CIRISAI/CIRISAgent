@@ -154,6 +154,8 @@ REASON_CALL_FINGERPRINT_REQUIRES_APPROVE = "wa.call_fingerprint_requires_approve
 REASON_RESOLVE_ONE_SUBJECT = "wa.resolve_one_subject"
 REASON_BASE_LINK_DIGEST_REQUIRES_APPROVE = "wa.base_link_digest_requires_approve"
 REASON_BASE_LINK_DIGEST_MISMATCH = "wa.base_link_digest_mismatch"
+#: The 409 when a deferral has no signed request row for the WA's signed answer to answer (#1316).
+REASON_NO_SIGNED_REQUEST_ROW = "wa.no_signed_request_row"
 
 
 def _proposed_base_link(pending: Optional[PendingDeferral]) -> Optional[ProposedBaseLink]:
@@ -324,6 +326,7 @@ async def _sign_response_row(
             "Cannot resolve deferral: it has no signed request row, so there is nothing for the "
             "Wise Authority's signed answer to answer",
             status_code=409,
+            reason_id=REASON_NO_SIGNED_REQUEST_ROW,
         )
     try:
         return await emit_deferral_response(

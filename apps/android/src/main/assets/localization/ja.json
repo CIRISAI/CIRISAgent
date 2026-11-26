@@ -4011,7 +4011,65 @@
     "call_h264_failed_load": "H.264コーデックはダウンロードされましたが、このコンピューターで読み込めませんでした。もう一度お試しいただくか、H.264ビデオをオフにしてください（コーデックが削除されます）。",
     "call_h264_needed": "この通話の参加者がH.264ビデオを送信しています。表示するにはH.264ビデオをオンにしてください。",
     "call_h264_licence": "ライセンスを表示",
-    "call_h264_licence_hide": "ライセンスを非表示"
+    "call_h264_licence_hide": "ライセンスを非表示",
+    "accord_edition2_offline_ceremony": "このノードはv62メッシュを実行しています。その信頼ルートは、セレモニーツールを使ってオフラインで作成されます。そのため、このアプリでは以前のメッシュの操作——ノードの承認、カノニカルノードの変更、信頼ルートの再発行、CIワーカーの認定、職務の付与——は提供されません。",
+    "accord_edition_unknown": "このノードは、自身が実行しているメッシュエディションを申告していないため、エディション間で異なる操作は、それが判明するまで提供されません。",
+    "invites_seat_approve": "加入を承認",
+    "invites_seat_approved": "あなたは相手の加入を承認しました。",
+    "invites_seat_approved_of": "あなたは承認しました。{required}人中{signed}人のメンバーが署名しました。",
+    "invites_seat_declined": "あなたは相手の加入を拒否しました。",
+    "invites_seat_waiting": "ルームのメンバーが相手の加入を承認するのを待っています。",
+    "invites_seat_confirm_title": "{name}の加入を承認しますか？",
+    "invites_seat_confirm_means": "相手は今すぐルームに加入し、それ以降はルームが保持するものを読めるようになります。",
+    "invites_seat_confirm_means_quorum": "あなたの承認はあなたの鍵で署名されます。{required}人のメンバーが承認すると相手は加入し、それ以降はルームが保持するものを読めるようになります。",
+    "invites_notice_seated": "相手はルームに加入しました。",
+    "invites_notice_seat_awaiting": "あなたの承認は記録されました。他のメンバーの承認がまだ必要です。",
+    "accord_kind_confirmed": "確認済み停止 — 発効中の停止を確認",
+    "accord_binding_confirmed": "確認済み · ホルダーの厳格な過半数が、既に発効している指定の停止を確認します。これは新たな停止でも通知でもありません。",
+    "constitutional_halt_not_halted": "このノードには、発効中の停止はありません。",
+    "constitutional_halt_lone": "1名のホルダーがこのノードを停止させました。ホルダーの厳格な過半数が確認しない限り、この停止は失効します。",
+    "constitutional_halt_lone_lapses": "1名のホルダーがこのノードを停止させました。ホルダーの厳格な過半数が確認しない限り、この停止は{time}に失効します。",
+    "constitutional_halt_confirmed": "ホルダーの厳格な過半数がこの停止を確認しました。ホルダーが再開するまで、停止は発効したままです。",
+    "constitutional_halt_lapsed": "現在、発効中の停止はありません。前回の停止は、期限内にホルダーの過半数の確認が得られなかったため失効しました。",
+    "constitutional_armed_yes": "有効：ジェネシスが発効しており、そのホルダーが着任しており、このノードはその信頼ルートを受け入れているため、ホルダーの停止はこのノードに届きます。",
+    "constitutional_armed_no": "無効：ホルダーの停止はこのノードに届きません。",
+    "constitutional_armed_unknown": "ホルダーの停止がこのノードに届くかどうかは分かっていません：このノードはそれを報告しません。",
+    "constitutional_holders_count_m_unknown": "{n}名のアコードホルダー。そのうち何名の合意が必要かは、このノードから報告されていません。",
+    "chat_file_added": "{who}が{name}をルームに追加しました",
+    "chat_file_added_you": "あなたが{name}をルームに追加しました",
+    "wa_identity_amendment_title": "このエージェントのアイデンティティ変更リクエスト",
+    "wa_identity_base_link_title": "このエージェントのアイデンティティをテンプレートに紐付け",
+    "wa_identity_base_link_custom_note": "このエージェントはカスタムテンプレートで動作しています。これをこのエージェントのアイデンティティのベースとして承認してください。",
+    "wa_identity_reapproval_title": "既存のアイデンティティ修正の再承認",
+    "wa_identity_unreadable_title": "このアプリが読み取れないアイデンティティ変更",
+    "wa_identity_unreadable_note": "このアプリはこのリクエストの全文を表示できないため、ここでは承認できません。概要と詳細は以下のとおりです。理由を付けて拒否するか、新しいバージョンのアプリで開いてください。",
+    "wa_identity_reapproval_note": "この修正は、正確な文言による承認が導入される前のものです。再度承認されるまでは有効になりません。",
+    "wa_identity_exact_text": "承認しようとしている正確な文言",
+    "wa_identity_edited_by_wa": "賢明な権威により編集されました",
+    "wa_identity_why": "理由（M-1、適応的一貫性）",
+    "wa_identity_no_justification": "理由は示されていません。",
+    "wa_identity_objection": "エージェントの{conscience}良心が異議を唱えました（{type}）：{reason}",
+    "wa_identity_template_name": "テンプレート",
+    "wa_identity_template_version": "バージョン",
+    "wa_identity_manifest_digest": "マニフェストダイジェスト",
+    "wa_identity_copy_digest": "ダイジェストをコピー",
+    "wa_identity_guidance_optional": "ガイダンス（承認時は任意、拒否時は必須）",
+    "wa_identity_reject_why": "拒否する場合は理由を述べてください。エージェントが新しい文言を提案できるようになります。",
+    "wa_identity_blocked_base_link_first": "まずこのエージェントのベースリンクを承認してください。アイデンティティがテンプレートに紐付けられるまで、承認済みの変更は適用されません。",
+    "wa_identity_blocked_outer_whitespace": "このテキストは先頭または末尾にスペースや改行があり、エージェントはこれを拒否します。ここでは変更されないため、承認できません。拒否して、エージェントに新しい文言の提案を依頼してください。",
+    "wa_identity_blocked_no_digest": "このリクエストには完全なテンプレートダイジェストがないため、承認できません。",
+    "wa_identity_blocked_agent_cannot_bind": "このエージェントはこの正確なリクエストに承認を紐付けることができないため、ここでは承認できません。",
+    "wa_identity_approved": "承認されました。適用される前に、エージェントの良心がこれをレビューします。",
+    "wa_identity_rejected": "拒否されました。エージェントは新しい文言を提案できます。",
+    "wa_identity_not_resolved": "このリクエストは解決されていません。他の賢明な権威が先に判断した可能性があります。",
+    "wa_identity_failed": "決定を送信できませんでした：{detail}",
+    "wa_identity_receipt_request": "リクエストのレシート",
+    "wa_identity_receipt_response": "あなたの回答のレシート",
+    "wa_identity_profile_unanchored": "このエージェントのアイデンティティはまだ紐付けられていません。まずベースリンクを承認してください。",
+    "wa_identity_profile_mismatch": "このエージェントのアイデンティティは承認済みのテンプレートと一致していません。それが解決するまで、アイデンティティの変更は適用されません。",
+    "wa_identity_profile_contested": "このエージェントのアイデンティティは争われています。それが解決するまで、アイデンティティの変更は適用されません。",
+    "wa_identity_profile_unknown": "このエージェントは、このアプリが認識していないアイデンティティの状態を報告しました。",
+    "wa_identity_open_base_link": "ベースリンクリクエストを開く"
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "このルームのモデレーションをレビューする人のみが、異議申し立てについて裁定できます。",
     "unknown_outcome": "裁定では、フラグが残る、異議申し立てが一部正当である、またはフラグが解除される、のいずれかが示されます。",
     "nothing_to_rule": "その項目のフラグに対して誰も異議を申し立てていません。裁定するものはありません。",
-    "appeal_failed": "異議申し立てを署名して記録できなかったため、何も変更されていません。"
+    "appeal_failed": "異議申し立てを署名して記録できなかったため、何も変更されていません。",
+    "nothing_to_take_down": "その項目には、取り下げるべき個別のコンテンツがありません。",
+    "takedown_needs_reason": "これを削除する理由を、ご自身の言葉で記入してください。",
+    "takedown_failed": "削除を署名して記録できなかったため、何も変更されていません。"
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "range_not_satisfiable": "リクエストされた範囲は、このファイルの範囲外です。",
     "same_room": "ファイルはすでにそのルームにあります — 移動するには別のルームを指定してください",
     "withheld_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てたため、あなたが表示を選択するまで非表示のままになります。",
-    "flagged_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てました。フラグが有効な間、ファイルはルームに残ります。"
+    "flagged_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てました。フラグが有効な間、ファイルはルームに残ります。",
+    "no_rendition": "このファイルには、ノードが作成できるプレビューがありません。",
+    "image_too_large": "この画像は大きすぎて、ノードがプレビューを作成できません。",
+    "image_undecodable": "ノードはこの画像を読み取ってプレビューを作成できませんでした。",
+    "unknown_rendition": "アプリは、ノードが作成しない種類のプレビューを要求しました。"
   },
   "notes": {
     "author_signer_unavailable": "このノードは現在あなたとして署名できないため、ノートは書き込まれませんでした。",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "この変更が効力を持つには、ルームのルールに基づきさらに署名が必要です。",
     "store_unavailable": "ノードはディレクトリを読み書きできませんでした。",
     "write_failed": "ノードは変更を書き込めませんでした。",
-    "two_people_only": "ルームは今のところ2人までです。"
+    "two_people_only": "ルームは今のところ2人までです。",
+    "room_full": "このルームは満員です。"
   },
   "partnership_queue": {
     "outcome_approved": "承認",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "このノードでは画面の共有はまだご利用いただけません。",
     "leave_reason_unknown": "それは通話を退出する理由ではありません。",
     "video_two_people_only": "ビデオと画面共有は、現在のところ2人の間の通話でのみ利用できます。この通話には2人より多くの参加者がいるため、音声のみになります。カメラがオンになっている場合、通話が2人に戻ると再び送信が開始されます。",
-    "relay_canonical_audio_only": "相手の映像は現在あなたに届きません：あなたと相手の間の経路は音声のみを伝えています。相手の声は引き続き聞くことができます。"
+    "relay_canonical_audio_only": "相手の映像は現在あなたに届きません：あなたと相手の間の経路は音声のみを伝えています。相手の声は引き続き聞くことができます。",
+    "share_already_live": "すでに画面を共有しています。",
+    "no_share": "画面を共有していません。"
   },
   "decisions": {
     "not_found": "その決定は、もうあなたに対して開かれていません。",
     "awaiting_members": "あなたの回答は記録されました。これが効力を持つには、他のメンバーの承認がまだ必要です。"
+  },
+  "wa": {
+    "resolve_one_subject": "文言かテンプレートダイジェストのどちらか一方のみを承認してください。両方は承認できません。",
+    "base_link_digest_requires_approve": "テンプレートダイジェストは「承認」と共にのみ送信できます。",
+    "base_link_digest_mismatch": "そのテンプレートダイジェストは、このエージェントが提案したものと一致しません。更新して再試行してください。",
+    "amendment_text_requires_approve": "修正文は「承認」と共にのみ送信できます。",
+    "no_signed_request_row": "この保留には署名済みのリクエストがないため、あなたの署名済みの回答が応答する対象がありません。"
+  },
+  "deferral": {
+    "unknown_request": "ノードはこの保留のリクエストを認識していません。"
   }
 }

@@ -105,6 +105,7 @@ def pseudonymizer(tmp_path: Path) -> SubjectPseudonymizer:
         (pp.AcctCarrier, egress_schema._CM_ACCT),
         (pp.SegmentStub, egress_schema._CM_STUB),
         (pp.GuardViolation, egress_schema._CM_VIOLATION),
+        (pp.PolicyFacts, egress_schema._CM_FACTS),
     ],
 )
 def test_every_model_field_is_typed_in_the_egress_schema(model, schema) -> None:
@@ -260,7 +261,7 @@ async def test_the_service_puts_it_in_the_signed_component_data(tmp_path: Path, 
 # --------------------------------------------------------------------------------------------- the published schema
 
 SCHEMA_PATH = (
-    Path(__file__).resolve().parents[3] / "ciris_adapters" / "ciris_accord_metrics" / "schemas" / "trace_format_v3_1_0.json"
+    Path(__file__).resolve().parents[3] / "ciris_adapters" / "ciris_accord_metrics" / "schemas" / "trace_format_v3_1_1.json"
 )
 
 
@@ -269,7 +270,7 @@ def _published() -> Dict[str, Any]:
 
 
 def test_the_published_llm_call_and_context_manifest_match_the_enforced_egress_schema() -> None:
-    """One source: trace_format_v3_1_0.json is exactly what tools/dev/gen_trace_format_schema.py renders from the
+    """One source: trace_format_v3_1_1.json is exactly what tools/dev/gen_trace_format_schema.py renders from the
     enforced egress schema. Regenerate with that script when the egress schema changes."""
     import importlib.util
 
@@ -289,7 +290,7 @@ def test_a_shipped_context_manifest_validates_against_the_published_schema(pseud
     cm = trace_context_manifest(real_manifest(), detailed=True, full=False, pseudonymizer=pseudonymizer)
     shipped = enforce_egress_schema("LLM_CALL", TraceLevel.DETAILED, {"context_manifest": cm}).data["context_manifest"]
     jsonschema.validate(shipped, {**schema["definitions"]["ContextManifest"], "definitions": schema["definitions"]})
-    assert schema["properties"]["trace_schema_version"]["const"] == "3.1.0"
+    assert schema["properties"]["trace_schema_version"]["const"] == "3.1.1"
 
 
 def test_the_published_schema_refuses_content_where_a_token_belongs(pseudonymizer: SubjectPseudonymizer) -> None:
@@ -447,3 +448,27 @@ def test_the_pinned_schema_refuses_an_unknown_member_or_a_missing_run_kind() -> 
         jsonschema.validate(
             _component("ACTION_RESULT", {"tokens_total": 3, "run_kind": "staging"}), component_schema
         )
+
+
+def test_the_manifest_carries_the_facts_the_guard_evaluated(pseudonymizer: SubjectPseudonymizer) -> None:
+    """A checker tests these facts against the scenario on their own: a wrong fact cannot hide its missing segment."""
+    manifest = real_manifest()  # built under PolicyFacts(amendment_in_force=True)
+    assert manifest.facts.amendment_in_force is True and manifest.facts.signed_guidance_in_force is False
+    cm = trace_context_manifest(manifest, detailed=True, full=False, pseudonymizer=pseudonymizer)
+    shipped = enforce_egress_schema("LLM_CALL", TraceLevel.DETAILED, {"context_manifest": cm}).data["context_manifest"]
+    assert shipped["facts"] == {
+        "signed_guidance_in_force": False,
+        "amendment_in_force": True,
+        "id_scoped": False,
+        "advisory_rule": False,
+    }
+
+
+
+def test_the_shipped_3_1_0_schema_is_frozen_at_its_pinned_bytes() -> None:
+    """CC 3.1.5 pins each label's file by hash: 3.1.0 is the v2.23.0 bytes, never regenerated (a new member is 3.1.1)."""
+    import hashlib
+
+    shipped = SCHEMA_PATH.with_name("trace_format_v3_1_0.json").read_bytes()
+    assert hashlib.sha256(shipped).hexdigest() == "bc2dd9ac2626f1f4c7e977e1f783baf228e966b71fe972dc1d3f207b8d4fe1c3"
+    assert json.loads(shipped)["properties"]["trace_schema_version"]["const"] == "3.1.0"

@@ -59,7 +59,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, WebSocket
 
 logger = logging.getLogger(__name__)
 
@@ -283,3 +283,119 @@ async def forward_to_node(path: str, request: Request) -> Response:
         headers=passthrough,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+# ---------------------------------------------------------------------------
+# WebSocket forwarding: a call's frames socket (2.23.2).
+# ---------------------------------------------------------------------------
+
+#: The node's socket paths a client opens on this listener. A call is an HTTP join (forwarded above) and then a
+#: WebSocket at the path the join answers (``frames_socket``), by default ``/v1/chat/<room>/call/frames``, or
+#: ``.../call/share/frames`` for a screen share, with a single-use ``?ticket=``. The desktop app points
+#: CIRIS_NODE_URL at this listener (desktop_launcher), so without this every upgrade answered 403, the app left at
+#: once, and every call ended ``why="left"`` with nothing published (Eric's laptop, 2026-11-21).
+_NODE_SOCKET_PATH = re.compile(r"^chat/[A-Za-z0-9._~:-]+/call(?:/share)?/frames$")
+
+#: Close codes that may not be sent on the wire (RFC 6455 section 7.4.1): reported locally, never sent.
+_UNSENDABLE_CLOSE = {1005, 1006, 1015}
+
+_SOCKET_OPEN_TIMEOUT_SECONDS = 10.0
+
+
+def _sendable_close(code: Optional[int], fallback: int) -> int:
+    if code is None or code in _UNSENDABLE_CLOSE:
+        return fallback
+    return code
+
+
+async def _deny(websocket: WebSocket, status_code: int, detail: str) -> None:
+    """Refuse the upgrade with an HTTP status the client can read (the node's own, when it refused)."""
+    try:
+        await websocket.send_denial_response(
+            Response(content=json.dumps({"detail": detail}), status_code=status_code, media_type="application/json")
+        )
+    except Exception:  # noqa: BLE001 - a server without the denial extension: a plain close (the client sees 403)
+        await websocket.close(code=1008)
+
+
+@router.websocket("/{path:path}")
+async def forward_socket_to_node(websocket: WebSocket, path: str) -> None:
+    """Forward one node socket (a call's frames) to the node: frames both ways, close both ways, with its code.
+
+    The query string (the single-use ticket) and the Authorization header go through unchanged. A close from the
+    app reaches the node as a close (the node reads that as ``why="left"``; an error as ``lost``), and the node's
+    close reaches the app with its code. A refused upgrade answers the node's own status (401 without a ticket).
+    """
+    import asyncio
+
+    from websockets.asyncio.client import connect
+    from websockets.exceptions import ConnectionClosed, InvalidStatus
+
+    if _is_brain_owned(path) or not (_NODE_SOCKET_PATH.match(path) or _is_node_owned(path)):
+        await _deny(websocket, 404, "Not Found")
+        return
+    safe_path = _safe_forward_path(path)
+    if safe_path is None:
+        logger.warning("Node proxy: refusing a malformed socket path (%d chars)", len(path))
+        await _deny(websocket, 400, "Malformed path")
+        return
+    query = websocket.url.query
+    url = f"ws://127.0.0.1:{NODE_FOLD_PORT}/v1/{safe_path}" + (f"?{query}" if query else "")
+    auth = websocket.headers.get("authorization")
+    headers = _forwardable_headers([("Authorization", auth)] if auth else [])
+    subprotocols = [p.strip() for p in websocket.headers.get("sec-websocket-protocol", "").split(",") if p.strip()]
+    try:
+        upstream = await connect(
+            url,
+            additional_headers=headers,
+            subprotocols=subprotocols or None,  # type: ignore[arg-type]
+            max_size=None,
+            open_timeout=_SOCKET_OPEN_TIMEOUT_SECONDS,
+            ping_interval=None,  # the app and the node keep their own liveness; this hop adds none
+        )
+    except InvalidStatus as refused:
+        await _deny(websocket, refused.response.status_code, "The node refused the socket.")
+        return
+    except Exception as e:  # noqa: BLE001 - the node did not answer
+        logger.warning("Node proxy: socket /v1/%s failed: %s", safe_path, type(e).__name__)
+        await _deny(websocket, 502, f"The folded node did not answer the socket /v1/{safe_path}.")
+        return
+
+    await websocket.accept(subprotocol=upstream.subprotocol)
+
+    async def app_to_node() -> None:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                await upstream.close(code=_sendable_close(message.get("code"), 1000), reason=message.get("reason") or "")
+                return
+            if message.get("bytes") is not None:
+                await upstream.send(message["bytes"])
+            elif message.get("text") is not None:
+                await upstream.send(message["text"])
+
+    async def node_to_app() -> None:
+        try:
+            async for frame in upstream:
+                if isinstance(frame, (bytes, bytearray)):
+                    await websocket.send_bytes(bytes(frame))
+                else:
+                    await websocket.send_text(frame)
+        except ConnectionClosed:
+            pass
+        code = _sendable_close(upstream.close_code, 1011)
+        try:
+            await websocket.close(code=code, reason=upstream.close_reason or "")
+        except Exception:  # noqa: BLE001 - the app already went
+            pass
+
+    tasks = [asyncio.ensure_future(app_to_node()), asyncio.ensure_future(node_to_app())]
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        for task in done:
+            if task.exception() is not None and not isinstance(task.exception(), ConnectionClosed):
+                logger.warning("Node proxy: socket /v1/%s ended: %s", safe_path, type(task.exception()).__name__)
+    finally:
+        await upstream.close()

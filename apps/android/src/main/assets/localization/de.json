@@ -4011,7 +4011,65 @@
     "call_h264_turn_off": "H.264-Video ausschalten",
     "call_h264_failed_download": "Der H.264-Codec konnte nicht heruntergeladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     "call_h264_failed_check": "Der Download war nicht die von Cisco veröffentlichte Datei, daher wurde er nicht behalten. Versuchen Sie es später erneut.",
-    "call_h264_failed_load": "Der H.264-Codec wurde heruntergeladen, aber dieser Computer konnte ihn nicht laden. Versuchen Sie es erneut, oder schalten Sie das H.264-Video aus, wodurch der Codec gelöscht wird."
+    "call_h264_failed_load": "Der H.264-Codec wurde heruntergeladen, aber dieser Computer konnte ihn nicht laden. Versuchen Sie es erneut, oder schalten Sie das H.264-Video aus, wodurch der Codec gelöscht wird.",
+    "wa_identity_amendment_title": "Antrag auf Änderung der Identität dieses Agenten",
+    "wa_identity_base_link_title": "Verankern Sie die Identität dieses Agenten mit seiner Vorlage",
+    "wa_identity_base_link_custom_note": "Dieser Agent verwendet eine benutzerdefinierte Vorlage. Genehmigen Sie sie als Basis der Identität dieses Agenten.",
+    "wa_identity_reapproval_title": "Eine bestehende Identitätsänderung erneut genehmigen",
+    "wa_identity_unreadable_title": "Eine Identitätsänderung, die diese App nicht lesen kann",
+    "wa_identity_unreadable_note": "Diese App kann diese Anfrage nicht vollständig anzeigen, daher kann sie hier nicht genehmigt werden. Zusammenfassung und Details finden Sie unten. Lehnen Sie sie mit einer Begründung ab, oder öffnen Sie sie in einer neueren App.",
+    "wa_identity_reapproval_note": "Diese Änderung stammt von vor der Einführung der Genehmigung des genauen Textes. Sie zählt erst, wenn sie erneut genehmigt wird.",
+    "wa_identity_exact_text": "Der genaue Text, den Sie genehmigen",
+    "wa_identity_edited_by_wa": "Von einer Wise Authority bearbeitet",
+    "wa_identity_why": "Warum (M-1, Adaptive Kohärenz)",
+    "wa_identity_no_justification": "Es wurde keine Begründung angegeben.",
+    "wa_identity_objection": "Das {conscience}-Gewissen des Agenten hat widersprochen ({type}): {reason}",
+    "wa_identity_template_name": "Vorlage",
+    "wa_identity_template_version": "Version",
+    "wa_identity_manifest_digest": "Manifest-Digest",
+    "wa_identity_copy_digest": "Digest kopieren",
+    "wa_identity_guidance_optional": "Hinweis (optional bei Genehmigung, erforderlich bei Ablehnung)",
+    "wa_identity_reject_why": "Geben Sie für eine Ablehnung einen Grund an, damit der Agent eine neue Formulierung vorschlagen kann",
+    "wa_identity_blocked_base_link_first": "Genehmigen Sie zuerst die Basisverknüpfung dieses Agenten. Solange seine Identität nicht mit seiner Vorlage verankert ist, kann eine genehmigte Änderung nicht wirksam werden.",
+    "wa_identity_blocked_outer_whitespace": "Dieser Text beginnt oder endet mit einem Leerzeichen oder Zeilenumbruch, was der Agent ablehnt. Er wird hier nicht geändert, daher kann er nicht genehmigt werden. Lehnen Sie ihn ab und bitten Sie den Agenten, ihn erneut vorzuschlagen.",
+    "wa_identity_blocked_no_digest": "Diese Anfrage hat keinen vollständigen Vorlagen-Digest, daher kann sie nicht genehmigt werden.",
+    "wa_identity_blocked_agent_cannot_bind": "Dieser Agent kann eine Genehmigung nicht an genau diese Anfrage binden, daher kann sie hier nicht genehmigt werden.",
+    "wa_identity_approved": "Genehmigt. Die Gewissen des Agenten prüfen es, bevor es wirksam wird.",
+    "wa_identity_rejected": "Abgelehnt. Der Agent kann eine neue Formulierung vorschlagen.",
+    "wa_identity_not_resolved": "Diese Anfrage wurde nicht entschieden. Möglicherweise hat eine andere Wise Authority sie zuerst entschieden.",
+    "wa_identity_failed": "Die Entscheidung konnte nicht gesendet werden: {detail}",
+    "wa_identity_receipt_request": "Quittung der Anfrage",
+    "wa_identity_receipt_response": "Quittung Ihrer Antwort",
+    "wa_identity_profile_unanchored": "Die Identität dieses Agenten ist noch nicht verankert. Genehmigen Sie zuerst seine Basisverknüpfung.",
+    "wa_identity_profile_mismatch": "Die Identität dieses Agenten stimmt nicht mit seiner genehmigten Vorlage überein. Keine Identitätsänderung wird wirksam, bis dies geklärt ist.",
+    "wa_identity_profile_contested": "Die Identität dieses Agenten ist umstritten. Keine Identitätsänderung wird wirksam, bis dies geklärt ist.",
+    "wa_identity_profile_unknown": "Dieser Agent hat einen Identitätsstatus gemeldet, den diese App nicht kennt.",
+    "wa_identity_open_base_link": "Basisverknüpfungs-Anfrage öffnen",
+    "accord_edition2_offline_ceremony": "Dieser Knoten betreibt das v62-Mesh. Seine Vertrauenswurzel wird offline erstellt, mit dem Zeremonie-Werkzeug. Aus diesem Grund bietet diese App die Handlungen des früheren Mesh hier nicht an: einen Knoten aufnehmen, einen kanonischen Knoten ändern, die Vertrauenswurzel neu prägen, CI-Worker segnen oder eine Pflicht übertragen.",
+    "accord_edition_unknown": "Dieser Knoten hat nicht angegeben, welche Mesh-Edition er betreibt, daher werden die Handlungen, die sich zwischen den Editionen unterscheiden, erst angeboten, wenn er dies tut.",
+    "invites_seat_approve": "Beitritt genehmigen",
+    "invites_seat_approved": "Sie haben den Beitritt dieser Person genehmigt.",
+    "invites_seat_approved_of": "Sie haben zugestimmt. {signed} von {required} Mitgliedern haben unterschrieben.",
+    "invites_seat_declined": "Sie haben den Beitritt dieser Person abgelehnt.",
+    "invites_seat_waiting": "Warte auf die Genehmigung des Beitritts durch die Mitglieder des Raums.",
+    "invites_seat_confirm_title": "Beitritt von {name} genehmigen?",
+    "invites_seat_confirm_means": "Diese Person tritt dem Raum jetzt bei und kann ab diesem Zeitpunkt lesen, was er enthält.",
+    "invites_seat_confirm_means_quorum": "Ihre Zustimmung wird mit Ihrem Schlüssel signiert. Diese Person tritt bei, sobald {required} Mitglieder zugestimmt haben, und kann ab diesem Zeitpunkt lesen, was der Raum enthält.",
+    "invites_notice_seated": "Diese Person ist dem Raum beigetreten.",
+    "invites_notice_seat_awaiting": "Ihre Zustimmung ist erfasst. Andere Mitglieder müssen noch zustimmen.",
+    "chat_file_added": "{who} hat {name} zum Raum hinzugefügt",
+    "chat_file_added_you": "Sie haben {name} zum Raum hinzugefügt",
+    "accord_kind_confirmed": "BESTÄTIGTER HALT — BESTÄTIGT DEN GELTENDEN HALT",
+    "accord_binding_confirmed": "bestätigt · eine strikte Mehrheit der Inhaber bestätigt den benannten Halt, der bereits in Kraft ist. Dies ist kein neuer Halt und keine Mitteilung.",
+    "constitutional_halt_not_halted": "Auf diesem Knoten ist kein Halt in Kraft.",
+    "constitutional_halt_lone": "Ein Inhaber hat diesen Knoten angehalten. Der Halt verfällt, sofern keine strikte Mehrheit der Inhaber ihn bestätigt.",
+    "constitutional_halt_lone_lapses": "Ein Inhaber hat diesen Knoten angehalten. Der Halt verfällt um {time}, sofern keine strikte Mehrheit der Inhaber ihn bestätigt.",
+    "constitutional_halt_confirmed": "Eine strikte Mehrheit der Inhaber hat diesen Halt bestätigt. Er bleibt in Kraft, bis die Inhaber den Betrieb wieder aufnehmen.",
+    "constitutional_halt_lapsed": "Kein Halt ist in Kraft. Der letzte Halt ist verfallen, weil keine Mehrheit der Inhaber ihn rechtzeitig bestätigt hat.",
+    "constitutional_armed_yes": "Scharfgeschaltet: Eine Genesis ist in Kraft, ihre Inhaber sind eingesetzt, und dieser Knoten akzeptiert diese Vertrauenswurzel, sodass ein Halt eines Inhabers ihn erreicht.",
+    "constitutional_armed_no": "Nicht scharfgeschaltet: Ein Halt eines Inhabers würde diesen Knoten nicht erreichen.",
+    "constitutional_armed_unknown": "Ob ein Halt eines Inhabers diesen Knoten erreichen würde, ist nicht bekannt: Dieser Knoten meldet dies nicht.",
+    "constitutional_holders_count_m_unknown": "{n} Accord-Inhaber. Der Knoten hat nicht gemeldet, wie viele von ihnen zustimmen müssen."
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Nur jemand, der die Moderation dieses Raums prüft, kann über einen Einspruch entscheiden.",
     "unknown_outcome": "Eine Entscheidung besagt, dass die Markierung bestehen bleibt, dass der Einspruch teilweise berechtigt ist, oder dass die Markierung aufgehoben wird.",
     "nothing_to_rule": "Niemand hat gegen die Markierung dieses Elements Einspruch eingelegt, daher gibt es nichts, worüber entschieden werden könnte.",
-    "appeal_failed": "Der Einspruch konnte nicht signiert und erfasst werden, daher wurde nichts geändert."
+    "appeal_failed": "Der Einspruch konnte nicht signiert und erfasst werden, daher wurde nichts geändert.",
+    "nothing_to_take_down": "Dieses Element hat keinen eigenständigen Inhalt, der entfernt werden könnte.",
+    "takedown_needs_reason": "Geben Sie in Ihren eigenen Worten an, warum Sie dies entfernen.",
+    "takedown_failed": "Die Entfernung konnte nicht signiert und erfasst werden, daher wurde nichts geändert."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "range_not_satisfiable": "Der angeforderte Bereich liegt außerhalb dieser Datei.",
     "same_room": "die Datei ist bereits in jenem Raum — zum Verschieben braucht es einen anderen Raum",
     "withheld_by_moderation": "Ein Moderator dieses Raums hat diese Datei markiert, daher bleibt sie verborgen, bis Sie sich entscheiden, sie anzusehen.",
-    "flagged_by_moderation": "ein Moderator dieses Raums hat diese Datei markiert; sie bleibt im Raum, solange die Markierung besteht"
+    "flagged_by_moderation": "ein Moderator dieses Raums hat diese Datei markiert; sie bleibt im Raum, solange die Markierung besteht",
+    "no_rendition": "Für diese Datei kann der Knoten keine Vorschau erstellen.",
+    "image_too_large": "Dieses Bild ist zu groß, als dass der Knoten eine Vorschau erstellen könnte.",
+    "image_undecodable": "Der Knoten konnte dieses Bild nicht lesen, um eine Vorschau zu erstellen.",
+    "unknown_rendition": "Die App hat eine Art von Vorschau angefordert, die der Knoten nicht erstellt."
   },
   "notes": {
     "author_signer_unavailable": "Dieser Knoten kann derzeit nicht als Sie signieren, daher wurde die Notiz nicht geschrieben.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Die Regel des Raums benötigt weitere Signaturen, bevor diese Änderung wirksam wird.",
     "store_unavailable": "Der Knoten konnte sein Verzeichnis nicht lesen oder schreiben.",
     "write_failed": "Der Knoten konnte die Änderung nicht schreiben.",
-    "two_people_only": "Ein Raum fasst vorerst zwei Personen."
+    "two_people_only": "Ein Raum fasst vorerst zwei Personen.",
+    "room_full": "Dieser Raum ist voll."
   },
   "partnership_queue": {
     "revocable_not_undoable": "Eine Partnerschaft kann jederzeit beendet werden, das ist jedoch kein Rückgängigmachen: Der Agent trennt Ihre Identität sofort und lässt das, was er gelernt hat, über 90 Tage verblassen.",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "Bildschirmfreigabe ist auf diesem Knoten noch nicht verfügbar.",
     "leave_reason_unknown": "Das ist kein Grund, einen Anruf zu verlassen.",
     "video_two_people_only": "Video und Bildschirmfreigabe funktionieren vorerst nur bei Anrufen zwischen zwei Personen. Dieser Anruf hat mehr Teilnehmer, daher ist es ein reiner Sprachanruf. Wenn Ihre Kamera eingeschaltet ist, sendet sie wieder, sobald der Anruf wieder zwischen zwei Personen stattfindet.",
-    "relay_canonical_audio_only": "Ihr Video erreicht Sie gerade nicht: Die Verbindung zwischen Ihnen überträgt nur Ton. Sie können die andere Person weiterhin hören."
+    "relay_canonical_audio_only": "Ihr Video erreicht Sie gerade nicht: Die Verbindung zwischen Ihnen überträgt nur Ton. Sie können die andere Person weiterhin hören.",
+    "share_already_live": "Sie teilen Ihren Bildschirm bereits.",
+    "no_share": "Sie teilen Ihren Bildschirm nicht."
   },
   "decisions": {
     "not_found": "Diese Entscheidung steht für Sie nicht mehr offen.",
     "awaiting_members": "Ihre Antwort ist erfasst. Die anderen Mitglieder müssen noch zustimmen, bevor dies wirksam wird."
+  },
+  "wa": {
+    "resolve_one_subject": "Genehmigen Sie entweder den Text oder den Vorlagen-Digest, nicht beides.",
+    "base_link_digest_requires_approve": "Ein Vorlagen-Digest kann nur zusammen mit Genehmigen gesendet werden.",
+    "base_link_digest_mismatch": "Dieser Vorlagen-Digest stimmt nicht mit dem überein, den dieser Agent vorgeschlagen hat. Aktualisieren Sie und versuchen Sie es erneut.",
+    "amendment_text_requires_approve": "Änderungstext kann nur zusammen mit Genehmigen gesendet werden.",
+    "no_signed_request_row": "Diese Rückstellung hat keine signierte Anfrage, daher gibt es nichts, worauf Ihre signierte Antwort antworten könnte."
+  },
+  "deferral": {
+    "unknown_request": "Der Knoten kennt die Anfrage dieser Rückstellung nicht."
   }
 }

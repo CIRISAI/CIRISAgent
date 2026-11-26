@@ -22,7 +22,7 @@ the rest correct the text.
 | Topic | As shipped | Where |
 |---|---|---|
 | Transport (§1, §2) | No HTTP shipping and no key registration. The agent hands each component to `ciris-lens-core` (`LensClient.capture_event`), which assembles, seals (JCS), signs with the persist Engine's federation signer and persists; delivery to the canonical is federation replication. §1–§2 describe the retired pre-2.9.6 wire (#857). | `services.py` `_build_and_capture` |
-| Schema version | `3.0.0`, stamped by lens-core at seal time; JCS (RFC 8785) canonical bytes. `3.1.0` from server 0.6 / persist v62.0. The `2.7.x` values below are history. | §8; `schemas/trace_format_v3_1_0.json` |
+| Schema version | `3.0.0`, stamped by lens-core at seal time; JCS (RFC 8785) canonical bytes. `3.1.0` / `3.1.1` from server 0.6 / persist v62 (3.1.1 adds the context manifest's `facts`; each label has its own pinned file).0. The `2.7.x` values below are history. | §8; `schemas/trace_format_v3_1_0.json` |
 | `trace_id` | Assigned by the substrate at seal; equals the `thought_id`. Not `trace-<thought_id>-<ts>`. | lens-core seal |
 | Envelope members | Also `pqc_key_id`, `pubkey_ml_dsa_65`, `signature_ml_dsa_65`: every trace signature is hybrid Ed25519 + ML-DSA-65 (100% PQC). | lens-core seal |
 | `agent_id_hash` | `sha256(signer pubkey)[:16]` only. **changed:** with no signing engine the component is refused (`events_refused_unkeyed_agent`), never captured under `sha256(name)` or `"unknown"`. | `services.py` `_capture_agent_id_hash` |
@@ -150,7 +150,7 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
 | `started_at` | ISO-8601 | yes | When the first component event arrived at the adapter. |
 | `completed_at` | ISO-8601 | yes (post-seal) | When `ACTION_RESULT` fired. **A trace is only sealed and shipped when ACTION_RESULT fires** — no action means it never happened (see §10). |
 | `trace_level` | enum | yes | `generic`, `detailed`, or `full_traces`. Same value as the batch envelope. |
-| `trace_schema_version` | string | yes | `"3.0.0"` as shipped, `"3.1.0"` from server 0.6 (§0). Version-gate consumers on this. |
+| `trace_schema_version` | string | yes | `"3.0.0"` as shipped, `"3.1.0"` or `"3.1.1"` from server 0.6 (§0). Version-gate consumers on this. |
 | `deployment_profile` | object | **yes at 2.7.9+** | Cohort taxonomy block — 6 fields declaring agent identity / operator design choices. See §3.2 for full enums + migration defaults. Persistence MUST reject 2.7.9-shaped traces missing this block; agents lacking explicit operator config emit migration defaults (§3.2). |
 | `components` | array | yes | Ordered components — see §4. |
 | `signature` | base64 | yes | Ed25519 signature over the canonical payload (§8). |
@@ -1008,11 +1008,12 @@ opaque JSON. A field `PromptManifest` gains is dropped at egress (and logged) un
 test fails on any unlisted model field.
 
 **Schema version.** The member rides additively under `trace_schema_version "3.0.0"` today: persist keeps
-component `data` verbatim and verifies the signature over it. `"3.1.0"` names it. lens-core stamps it from
-server 0.6, and persist v62.0 adds it to the accepted list. The published schema is
-`ciris_adapters/ciris_accord_metrics/schemas/trace_format_v3_1_0.json`. Its `LlmCallData` and
-`ContextManifest` definitions are generated from the enforced egress schema
-(`egress_schema.json_schema_for`), and a test compares them, so the document cannot drift from what ships.
+component `data` verbatim and verifies the signature over it. `"3.1.0"` names the member (v2.23.0); `"3.1.1"` (v2.23.2) adds the manifest's `facts`, the PolicyFacts the guard
+evaluated. Every definition is closed, so a new member takes a new label: an admitter selects the pinned file by it
+(CC 3.1.5). lens-core stamps the label from server 0.6, and persist v62.0 accepts both. Each label has its own
+frozen file: `schemas/trace_format_v3_1_0.json` (the v2.23.0 bytes) and `schemas/trace_format_v3_1_1.json`. The
+current file's `LlmCallData` and `ContextManifest` definitions are generated from the enforced egress schema
+(`tools/dev/gen_trace_format_schema.py`), and a test compares them, so the document cannot drift from what ships.
 
 **Size** (measured through the real assembler at `detailed`, egress-filtered, 0 violations): evaluators and
 drafters 5.7–11.6 KB per call (pdma 7.6, csdma 8.3, dsdma 7.6, idma 7.2, aspdma 8.8, aspdma retry 9.7, tsaspdma

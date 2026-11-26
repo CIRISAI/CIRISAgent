@@ -4011,7 +4011,65 @@
     "files_act_appealed": "이의 제기가 접수되었습니다. 이 룸의 검토자가 판정할 것입니다.",
     "files_act_ruled": "판정이 기록되었습니다.",
     "files_act_flagged": "플래그가 지정되었습니다. 이제 공지 뒤에 숨겨집니다.",
-    "files_act_flag_cleared": "플래그가 해제되었습니다."
+    "files_act_flag_cleared": "플래그가 해제되었습니다.",
+    "accord_edition_unknown": "이 노드는 어떤 메시 에디션을 실행하는지 밝히지 않았으므로, 에디션 간에 다른 행위는 밝힐 때까지 제공되지 않습니다.",
+    "wa_identity_amendment_title": "이 에이전트의 신원 변경 요청",
+    "wa_identity_base_link_title": "이 에이전트의 신원을 템플릿에 고정",
+    "wa_identity_base_link_custom_note": "이 에이전트는 커스텀 템플릿을 실행합니다. 이를 이 에이전트의 신원 기반으로 승인하세요.",
+    "wa_identity_reapproval_title": "기존 신원 수정안 재승인",
+    "wa_identity_unreadable_title": "이 앱이 읽을 수 없는 신원 변경",
+    "wa_identity_unreadable_note": "이 앱은 이 요청을 전체로 표시할 수 없어 여기서 승인할 수 없습니다. 요약과 세부 정보는 아래에 있습니다. 이유를 들어 거부하거나, 더 새로운 앱에서 여세요.",
+    "wa_identity_reapproval_note": "이 수정안은 정확한 텍스트 승인 이전의 것입니다. 다시 승인되기 전까지는 유효하지 않습니다.",
+    "wa_identity_exact_text": "승인하시는 정확한 텍스트",
+    "wa_identity_edited_by_wa": "Wise Authority가 편집함",
+    "wa_identity_why": "이유 (M-1, 적응형 일관성)",
+    "wa_identity_no_justification": "사유가 제시되지 않았습니다.",
+    "wa_identity_objection": "에이전트의 {conscience} 양심이 이의를 제기했습니다 ({type}): {reason}",
+    "wa_identity_template_name": "템플릿",
+    "wa_identity_template_version": "버전",
+    "wa_identity_manifest_digest": "매니페스트 다이제스트",
+    "wa_identity_copy_digest": "다이제스트 복사",
+    "wa_identity_guidance_optional": "안내 (승인 시 선택, 거부 시 필수)",
+    "wa_identity_reject_why": "거부하려면 이유를 말씀해 주세요. 그러면 에이전트가 새로운 문구를 제안할 수 있습니다.",
+    "wa_identity_blocked_base_link_first": "이 에이전트의 기본 연결을 먼저 승인하세요. 신원이 템플릿에 고정되기 전까지는 승인된 변경 사항이 적용될 수 없습니다.",
+    "wa_identity_blocked_outer_whitespace": "이 텍스트는 공백이나 줄바꿈으로 시작하거나 끝나며, 에이전트는 이를 받아들이지 않습니다. 여기서는 변경되지 않으므로 승인할 수 없습니다. 거부한 후 에이전트에게 다시 제안하도록 요청하세요.",
+    "wa_identity_blocked_no_digest": "이 요청에는 완전한 템플릿 다이제스트가 없으므로 승인할 수 없습니다.",
+    "wa_identity_blocked_agent_cannot_bind": "이 에이전트는 이 승인을 정확히 이 요청에 결합할 수 없으므로, 여기서는 승인할 수 없습니다.",
+    "wa_identity_approved": "승인됨. 적용되기 전에 에이전트의 양심들이 이를 검토합니다.",
+    "wa_identity_rejected": "거부됨. 에이전트가 새로운 문구를 제안할 수 있습니다.",
+    "wa_identity_not_resolved": "이 요청은 처리되지 않았습니다. 다른 Wise Authority가 먼저 결정했을 수 있습니다.",
+    "wa_identity_failed": "결정을 전송할 수 없습니다: {detail}",
+    "wa_identity_receipt_request": "요청 영수증",
+    "wa_identity_receipt_response": "사용자의 답변 영수증",
+    "wa_identity_profile_unanchored": "이 에이전트의 신원이 아직 고정되지 않았습니다. 먼저 기본 연결을 승인하세요.",
+    "wa_identity_profile_mismatch": "이 에이전트의 신원이 승인된 템플릿과 일치하지 않습니다. 이 문제가 해결되기 전까지는 신원 변경이 적용되지 않습니다.",
+    "wa_identity_profile_contested": "이 에이전트의 신원에 이의가 제기되어 있습니다. 이 문제가 해결되기 전까지는 어떠한 신원 변경도 적용되지 않습니다.",
+    "wa_identity_profile_unknown": "이 에이전트가 이 앱이 알지 못하는 신원 상태를 보고했습니다.",
+    "wa_identity_open_base_link": "기본 연결 요청 열기",
+    "accord_edition2_offline_ceremony": "이 노드는 v62 메시를 실행합니다. 신뢰 루트는 세리머니 도구를 사용해 오프라인으로 생성됩니다. 그런 이유로 이 앱은 여기서 이전 메시의 행위, 즉 노드 승인, 캐노니컬 노드 변경, 신뢰 루트 재발행, CI 워커 축복, 의무 부여를 제공하지 않습니다.",
+    "chat_file_added": "{who}님이 {name}을(를) 방에 추가했습니다",
+    "chat_file_added_you": "본인이 {name}을(를) 방에 추가했습니다",
+    "invites_seat_approve": "참여 승인",
+    "invites_seat_approved": "사용자가 그들의 참여를 승인했습니다.",
+    "invites_seat_approved_of": "승인했습니다. {required}명 중 {signed}명이 서명했습니다.",
+    "invites_seat_declined": "사용자가 그들의 참여를 거절했습니다.",
+    "invites_seat_waiting": "방의 구성원들이 그들의 참여를 승인하기를 기다리는 중입니다.",
+    "invites_seat_confirm_title": "{name}님의 참여를 승인하시겠습니까?",
+    "invites_seat_confirm_means": "그들은 지금 방에 합류하며, 이후 방이 보유한 것을 읽을 수 있습니다.",
+    "invites_seat_confirm_means_quorum": "사용자의 승인은 사용자의 키로 서명됩니다. {required}명의 구성원이 승인하면 그들이 합류하며, 이후 방이 보유한 것을 읽을 수 있습니다.",
+    "invites_notice_seated": "그들이 방에 합류했습니다.",
+    "invites_notice_seat_awaiting": "사용자의 승인이 기록되었습니다. 다른 구성원들의 승인이 아직 필요합니다.",
+    "accord_kind_confirmed": "확인된 정지 — 발효 중인 정지를 확인함",
+    "accord_binding_confirmed": "확인됨 · 홀더의 엄격한 다수가 이미 발효 중인 지정된 정지를 확인합니다. 이는 새로운 정지가 아니며 공지사항도 아닙니다.",
+    "constitutional_halt_not_halted": "이 노드에는 발효 중인 정지가 없습니다.",
+    "constitutional_halt_lone": "홀더 한 명이 이 노드를 정지시켰습니다. 홀더의 절대 다수가 확인하지 않으면 이 정지는 실효됩니다.",
+    "constitutional_halt_lone_lapses": "홀더 한 명이 이 노드를 정지시켰습니다. 홀더의 절대 다수가 확인하지 않으면 이 정지는 {time}에 실효됩니다.",
+    "constitutional_halt_confirmed": "홀더의 절대 다수가 이 정지를 확인했습니다. 홀더들이 재개할 때까지 발효 상태를 유지합니다.",
+    "constitutional_halt_lapsed": "발효 중인 정지가 없습니다. 마지막 정지는 홀더의 다수가 제시간에 확인하지 못해 실효되었습니다.",
+    "constitutional_armed_yes": "무장됨: 제네시스가 발효 중이고, 그 홀더들이 자리 잡았으며, 이 노드가 그 신뢰 루트를 수용하므로, 홀더의 정지가 이 노드에 도달합니다.",
+    "constitutional_armed_no": "무장되지 않음: 홀더의 정지는 이 노드에 도달하지 않습니다.",
+    "constitutional_armed_unknown": "홀더의 정지가 이 노드에 도달할지는 알 수 없습니다: 이 노드는 이를 보고하지 않습니다.",
+    "constitutional_holders_count_m_unknown": "{n}명의 어코드 홀더. 노드는 그중 몇 명이 동의해야 하는지 보고하지 않았습니다."
   },
   "prompts": {
     "dma": {
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "이 룸의 조정을 검토하는 사람만 이의 제기를 판정할 수 있습니다.",
     "unknown_outcome": "판정은 플래그가 유지됨, 이의 제기가 일부 타당함, 또는 플래그가 해제됨 중 하나를 말합니다.",
     "nothing_to_rule": "그 항목의 플래그에 대해 아무도 이의를 제기하지 않았으므로, 판정할 것이 없습니다.",
-    "appeal_failed": "이의 제기를 서명하여 기록할 수 없어, 변경된 것은 없습니다."
+    "appeal_failed": "이의 제기를 서명하여 기록할 수 없어, 변경된 것은 없습니다.",
+    "nothing_to_take_down": "그 항목에는 삭제할 별도의 콘텐츠가 없습니다.",
+    "takedown_needs_reason": "이것을 삭제하는 이유를 본인의 말로 설명해 주세요.",
+    "takedown_failed": "삭제 조치를 서명하여 기록할 수 없어, 변경된 것은 없습니다."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "evicted": "이 바이트는 이 노드에서 정리되어 이곳에서 다시 읽을 수 없습니다.",
     "field_after_file": "업로드의 세부 정보가 파일보다 뒤에 도착했습니다. 아무것도 저장되지 않았습니다; 파일을 마지막에 전송하세요.",
     "withheld_by_moderation": "이 룸의 모더레이터가 이 파일에 플래그를 지정하여, 직접 보기를 선택하기 전까지는 숨겨진 상태로 유지됩니다.",
-    "flagged_by_moderation": "이 룸의 모더레이터가 이 파일에 플래그를 지정했습니다. 플래그가 유지되는 동안 파일은 룸에 남아 있습니다"
+    "flagged_by_moderation": "이 룸의 모더레이터가 이 파일에 플래그를 지정했습니다. 플래그가 유지되는 동안 파일은 룸에 남아 있습니다",
+    "no_rendition": "이 파일은 노드가 만들 수 있는 미리보기가 없습니다.",
+    "image_too_large": "이 이미지는 너무 커서 노드가 미리보기를 만들 수 없습니다.",
+    "image_undecodable": "노드가 미리보기를 만들기 위해 이 이미지를 읽을 수 없었습니다.",
+    "unknown_rendition": "앱이 노드가 만들지 않는 종류의 미리보기를 요청했습니다."
   },
   "notes": {
     "author_signer_unavailable": "이 노드가 지금은 사용자로서 서명할 수 없어 노트가 작성되지 않았습니다.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "이 변경이 효력을 발생하기 전에 방의 규칙에 따라 더 많은 서명이 필요합니다.",
     "store_unavailable": "노드가 디렉터리를 읽거나 쓸 수 없었습니다.",
     "write_failed": "노드가 변경 사항을 기록할 수 없었습니다.",
-    "two_people_only": "현재 방은 두 사람만 수용합니다."
+    "two_people_only": "현재 방은 두 사람만 수용합니다.",
+    "room_full": "이 방은 가득 찼습니다."
   },
   "partnership_queue": {
     "title": "이 에이전트와의 파트너십",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "이 노드에서는 아직 화면 공유를 사용할 수 없습니다.",
     "leave_reason_unknown": "그것은 통화를 종료할 이유가 아닙니다.",
     "video_two_people_only": "영상 및 화면 공유는 현재 두 사람 간의 통화에서만 작동합니다. 이 통화에는 참가자가 더 많아 음성 통화로만 진행됩니다. 카메라가 켜져 있다면, 통화 인원이 다시 두 명으로 줄어들면 전송이 재개됩니다.",
-    "relay_canonical_audio_only": "상대방의 영상이 지금은 사용자에게 전달되지 않습니다: 두 사람 사이의 경로는 음성만 전달합니다. 그래도 상대방의 목소리는 들을 수 있습니다."
+    "relay_canonical_audio_only": "상대방의 영상이 지금은 사용자에게 전달되지 않습니다: 두 사람 사이의 경로는 음성만 전달합니다. 그래도 상대방의 목소리는 들을 수 있습니다.",
+    "share_already_live": "사용자는 이미 화면을 공유하고 있습니다.",
+    "no_share": "사용자는 화면을 공유하고 있지 않습니다."
   },
   "decisions": {
     "not_found": "그 결정은 더 이상 사용자에게 열려 있지 않습니다.",
     "awaiting_members": "사용자의 답변이 기록되었습니다. 이 결정이 효력을 발생하기 전에 다른 구성원들의 승인이 필요합니다."
+  },
+  "wa": {
+    "resolve_one_subject": "텍스트나 템플릿 다이제스트 중 하나만 승인하세요. 둘 다는 안 됩니다.",
+    "base_link_digest_requires_approve": "템플릿 다이제스트는 승인과 함께만 전송할 수 있습니다.",
+    "base_link_digest_mismatch": "그 템플릿 다이제스트가 이 에이전트가 제안한 것과 일치하지 않습니다. 새로고침 후 다시 시도하세요.",
+    "amendment_text_requires_approve": "수정안 텍스트는 승인과 함께만 전송할 수 있습니다.",
+    "no_signed_request_row": "이 유예에는 서명된 요청이 없으므로, 사용자의 서명된 답변이 응답할 대상이 없습니다."
+  },
+  "deferral": {
+    "unknown_request": "노드는 이 유예의 요청을 알지 못합니다."
   }
 }

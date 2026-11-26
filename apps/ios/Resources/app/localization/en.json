@@ -4205,7 +4205,65 @@
     "call_h264_failed_load": "The H.264 codec was downloaded, but this computer couldn't load it. Try again, or turn H.264 video off, which deletes the codec.",
     "call_h264_needed": "Someone in this call is sending H.264 video. Turn on H.264 video to see it.",
     "call_h264_licence": "Show the license",
-    "call_h264_licence_hide": "Hide the license"
+    "call_h264_licence_hide": "Hide the license",
+    "invites_seat_approve": "Approve joining",
+    "invites_seat_approved": "You approved them joining.",
+    "invites_seat_approved_of": "You approved. {signed} of {required} members have signed.",
+    "invites_seat_declined": "You declined them joining.",
+    "invites_seat_waiting": "Waiting for the room's members to approve them joining.",
+    "invites_seat_confirm_title": "Approve {name} joining?",
+    "invites_seat_confirm_means": "They join the room now and can read what it holds from then on.",
+    "invites_seat_confirm_means_quorum": "Your approval is signed with your key. They join once {required} members have approved, and can read what the room holds from then on.",
+    "invites_notice_seated": "They've joined the room.",
+    "invites_notice_seat_awaiting": "Your approval is recorded. Other members still need to approve.",
+    "accord_edition2_offline_ceremony": "This node runs the v62 mesh. Its trust root is created offline, with the ceremony tool. For that reason this app does not offer the acts of the earlier mesh here: admitting a node, changing a canonical node, re-minting the trust root, blessing CI workers, or conferring a duty.",
+    "accord_edition_unknown": "This node has not said which mesh edition it runs, so the acts that differ between editions are not offered until it does.",
+    "accord_kind_confirmed": "CONFIRMED HALT — CONFIRMS THE HALT IN FORCE",
+    "accord_binding_confirmed": "confirmed · a strict majority of the holders confirms the named halt that is already in force. It is not a new halt and not a notice.",
+    "constitutional_halt_not_halted": "No halt is in force on this node.",
+    "constitutional_halt_lone": "One holder has halted this node. The halt lapses unless a strict majority of the holders confirms it.",
+    "constitutional_halt_lone_lapses": "One holder has halted this node. The halt lapses at {time} unless a strict majority of the holders confirms it.",
+    "constitutional_halt_confirmed": "A strict majority of the holders has confirmed this halt. It stays in force until the holders resume.",
+    "constitutional_halt_lapsed": "No halt is in force. The last halt lapsed because no majority of the holders confirmed it in time.",
+    "constitutional_armed_yes": "Armed: a genesis is in force, its holders are seated, and this node accepts that trust root, so a holder's halt reaches it.",
+    "constitutional_armed_no": "Not armed: a holder's halt would not reach this node.",
+    "constitutional_armed_unknown": "Whether a holder's halt would reach this node is not known: this node does not report it.",
+    "constitutional_holders_count_m_unknown": "{n} accord holder(s). The node did not report how many of them must agree.",
+    "chat_file_added": "{who} added {name} to the room",
+    "chat_file_added_you": "You added {name} to the room",
+    "wa_identity_amendment_title": "Request to change this agent's identity",
+    "wa_identity_base_link_title": "Anchor this agent's identity to its template",
+    "wa_identity_base_link_custom_note": "This agent runs a custom template. Approve it as the base of this agent's identity.",
+    "wa_identity_reapproval_title": "Re-approve an existing identity amendment",
+    "wa_identity_unreadable_title": "An identity change this app can't read",
+    "wa_identity_unreadable_note": "This app can't show this request in full, so it can't be approved here. Its summary and details are below. Reject it with a reason, or open it on a newer app.",
+    "wa_identity_reapproval_note": "This amendment predates exact-text approval. It doesn't count until it is approved again.",
+    "wa_identity_exact_text": "The exact text you are approving",
+    "wa_identity_edited_by_wa": "Edited by a Wise Authority",
+    "wa_identity_why": "Why (M-1, Adaptive Coherence)",
+    "wa_identity_no_justification": "No justification was stated.",
+    "wa_identity_objection": "The agent's {conscience} conscience objected ({type}): {reason}",
+    "wa_identity_template_name": "Template",
+    "wa_identity_template_version": "Version",
+    "wa_identity_manifest_digest": "Manifest digest",
+    "wa_identity_copy_digest": "Copy digest",
+    "wa_identity_guidance_optional": "Guidance (optional to approve, needed to reject)",
+    "wa_identity_reject_why": "To reject, say why, so the agent can propose a new wording",
+    "wa_identity_blocked_base_link_first": "Approve this agent's base link first. Until its identity is anchored to its template, an approved change can't apply.",
+    "wa_identity_blocked_outer_whitespace": "This text starts or ends with a space or line break, which the agent refuses. It isn't changed here, so it can't be approved. Reject it and ask the agent to propose it again.",
+    "wa_identity_blocked_no_digest": "This request has no complete template digest, so it can't be approved.",
+    "wa_identity_blocked_agent_cannot_bind": "This agent can't bind an approval to this exact request, so it can't be approved here.",
+    "wa_identity_approved": "Approved. The agent's consciences review it before it applies.",
+    "wa_identity_rejected": "Rejected. The agent can propose a new wording.",
+    "wa_identity_not_resolved": "This request wasn't resolved. Another Wise Authority may have decided it first.",
+    "wa_identity_failed": "The decision could not be sent: {detail}",
+    "wa_identity_receipt_request": "Request receipt",
+    "wa_identity_receipt_response": "Your answer's receipt",
+    "wa_identity_profile_unanchored": "This agent's identity isn't anchored yet. Approve its base link first.",
+    "wa_identity_profile_mismatch": "This agent's identity doesn't match its approved template. No identity change applies until that is settled.",
+    "wa_identity_profile_contested": "This agent's identity is contested. No identity change applies until that is settled.",
+    "wa_identity_profile_unknown": "This agent reported an identity status this app doesn't know.",
+    "wa_identity_open_base_link": "Open the base-link request"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
@@ -5661,7 +5719,10 @@
     "not_a_reviewer": "Only someone who reviews this room's moderation can rule on an appeal.",
     "unknown_outcome": "A ruling says the flag stays, that the appeal is right in part, or that the flag is lifted.",
     "nothing_to_rule": "Nobody has appealed that item's flag, so there is nothing to rule on.",
-    "appeal_failed": "The appeal could not be signed and recorded, so nothing changed."
+    "appeal_failed": "The appeal could not be signed and recorded, so nothing changed.",
+    "nothing_to_take_down": "That item has no separate content to take down.",
+    "takedown_needs_reason": "Say why you're taking this down, in your own words.",
+    "takedown_failed": "The takedown could not be signed and recorded, so nothing changed."
   },
   "operator": {
     "carriage": {
@@ -6305,7 +6366,11 @@
     "withdrawn": "Its author withdrew this file. The bytes are no longer served anywhere.",
     "awaiting_key": "Its bytes are here, but this device's key for them hasn't arrived yet. It follows on its own; try again shortly.",
     "withheld_by_moderation": "A moderator of this room flagged this file, so it stays hidden until you choose to see it.",
-    "flagged_by_moderation": "a moderator of this room flagged this file; it stays in the room while the flag stands"
+    "flagged_by_moderation": "a moderator of this room flagged this file; it stays in the room while the flag stands",
+    "no_rendition": "This file has no preview the node can make.",
+    "image_too_large": "This image is too large for the node to make a preview.",
+    "image_undecodable": "The node couldn't read this image to make a preview.",
+    "unknown_rendition": "The app asked for a kind of preview the node doesn't make."
   },
   "notes": {
     "author_signer_unavailable": "This node can't sign as you right now, so the note wasn't written.",
@@ -6469,7 +6534,8 @@
     "quorum_pending": "The room's rule needs more signatures before this change takes effect.",
     "store_unavailable": "The node could not read or write its directory.",
     "write_failed": "The node could not write the change.",
-    "two_people_only": "A room holds two people for now."
+    "two_people_only": "A room holds two people for now.",
+    "room_full": "This room is full."
   },
   "membership": {
     "consent_required": "Someone has to accept an invitation before they join. Nobody is added to a household or a community without their own yes.",
@@ -6630,10 +6696,22 @@
     "share_unavailable": "Sharing your screen isn't available on this node yet.",
     "leave_reason_unknown": "That isn't a reason for leaving a call.",
     "video_two_people_only": "Video and screen sharing work in calls between two people for now. This call has more, so it's voice only. If your camera is on, it starts sending again when the call is back to two.",
-    "relay_canonical_audio_only": "Their video can't reach you right now: the route between you carries sound only. You can still hear them."
+    "relay_canonical_audio_only": "Their video can't reach you right now: the route between you carries sound only. You can still hear them.",
+    "share_already_live": "You're already sharing your screen.",
+    "no_share": "You aren't sharing your screen."
   },
   "decisions": {
     "not_found": "That decision isn't open for you any more.",
     "awaiting_members": "Your answer is recorded. The other members still need to approve before this takes effect."
+  },
+  "wa": {
+    "resolve_one_subject": "Approve either the text or the template digest, not both.",
+    "base_link_digest_requires_approve": "A template digest can only be sent with Approve.",
+    "base_link_digest_mismatch": "That template digest doesn't match the one this agent proposed. Refresh and try again.",
+    "amendment_text_requires_approve": "Amendment text can only be sent with Approve.",
+    "no_signed_request_row": "This deferral has no signed request, so there is nothing for your signed answer to answer."
+  },
+  "deferral": {
+    "unknown_request": "The node doesn't know this deferral's request."
   }
 }

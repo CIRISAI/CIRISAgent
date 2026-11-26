@@ -30,7 +30,7 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 TEMPLATES = REPO / "ciris_engine" / "ciris_templates"
-MANIFEST = REPO / "pre-approved-templates.json"
+MANIFEST = REPO / "ciris_engine" / "data" / "seed" / "pre-approved-templates.json"
 
 _MAN = json.loads(MANIFEST.read_text(encoding="utf-8"))
 _FILES = sorted(TEMPLATES.glob("*.yaml"))
@@ -64,6 +64,8 @@ def test_the_manifest_names_exactly_what_ships() -> None:
 def test_the_root_signature_verifies() -> None:
     """Over the templates object as recorded, using the convention the generator
     signs with: compact JSON, keys sorted."""
+    if "root_signature" not in _MAN:
+        pytest.skip("rebuilt manifest: the retired classical root is not carried (the hybrid pre-approval is checked)")
     nacl_signing = pytest.importorskip("nacl.signing", reason="pynacl not installed")
     payload = json.dumps(_MAN["templates"], sort_keys=True, separators=(",", ":")).encode()
     nacl_signing.VerifyKey(base64.b64decode(_MAN["root_public_key"])).verify(
@@ -82,7 +84,16 @@ def test_each_ledger_points_at_the_key_that_signed_the_manifest(path: pathlib.Pa
     fp = led.get("public_key_fingerprint")
     if fp is None:
         pytest.skip(f"{path.stem} carries no creator ledger")
+    if "root_public_key" not in _MAN:
+        pytest.skip("rebuilt manifest: no retired classical root to point at")
     root = base64.b64decode(_MAN["root_public_key"])
     assert fp == "sha256:" + hashlib.sha256(root).hexdigest(), (
         f"{path.stem} names a key that did not sign the manifest"
     )
+
+
+
+def test_the_manifest_ships_inside_the_package() -> None:
+    """Installed and mobile agents read only ciris_engine/data/seed: a repo-root manifest is never found there."""
+    assert MANIFEST.is_file()
+    assert not (REPO / "pre-approved-templates.json").exists(), "one manifest, in the package"

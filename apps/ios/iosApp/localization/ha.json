@@ -4178,7 +4178,65 @@
     "call_h264_failed_load": "An zazzage codec na H.264, amma wannan kwamfuta ta kasa loda shi. Sake gwadawa, ko kashe bidiyon H.264, wanda zai share codec.",
     "call_h264_needed": "Wani a cikin wannan kiran yana aikawa da bidiyon H.264. Ku kunna bidiyon H.264 don ganinsa.",
     "call_h264_licence": "Nuna lasisin",
-    "call_h264_licence_hide": "Ɓoye lasisin"
+    "call_h264_licence_hide": "Ɓoye lasisin",
+    "accord_edition2_offline_ceremony": "Wannan kumburi yana gudanar da mesh v62. Ana ƙirƙirar tushen amincewarsa ba a kan layi ba, da KAYAN AIKI na biki. Saboda haka wannan manhaja ba ta bayar da ayyukan mesh na baya a nan: shigar da kumburi, canza kumburin misali, sake ƙirƙirar tushen amincewa, albarkatar ma'aikatan CI, ko damƙa wani aiki.",
+    "accord_edition_unknown": "Wannan kumburi bai faɗi wace fitowar mesh yake gudanarwa ba, don haka ba a bayar da ayyukan da suka bambanta tsakanin fitowai ba sai ya faɗi.",
+    "chat_file_added": "{who} ya ƙara {name} zuwa ɗakin",
+    "chat_file_added_you": "Kai ka ƙara {name} zuwa ɗakin",
+    "wa_identity_blocked_no_digest": "Wannan buƙata ba ta da cikakken taƙaitaccen samfuri, don haka ba za a iya amincewa da ita ba.",
+    "wa_identity_blocked_agent_cannot_bind": "Wannan wakili ba zai iya ɗaure amincewa ga wannan buƙata daidai ba, don haka ba za a iya amincewa da ita a nan ba.",
+    "wa_identity_approved": "An amince. Lamirorin wakili za su duba shi kafin ya fara aiki.",
+    "wa_identity_rejected": "An KI. Wakili zai iya ba da shawarar sabon rubutu.",
+    "wa_identity_not_resolved": "Ba a warware wannan buƙata ba. Wata Hukumar Hikima wataƙila ta riga ta yanke shawara a kai.",
+    "wa_identity_failed": "Ba a iya aika shawarar ba: {detail}",
+    "wa_identity_receipt_request": "Rasitin buƙata",
+    "wa_identity_receipt_response": "Rasitin amsarku",
+    "wa_identity_profile_unanchored": "Ba a ɗora shaidar wannan wakili ba tukuna. Fara amincewa da haɗin asalinsa.",
+    "wa_identity_profile_mismatch": "Shaidar wannan wakili ba ta dace da samfurin da aka amince da shi ba. Babu canjin shaida da zai aiki har sai an warware wannan.",
+    "wa_identity_profile_contested": "Ana jayayya kan shaidar wannan wakili. Babu canjin shaida da zai aiki har sai an warware wannan.",
+    "wa_identity_profile_unknown": "Wannan wakili ya ba da rahoton matsayin shaida da wannan manhaja ba ta sani ba.",
+    "wa_identity_open_base_link": "Buɗe buƙatar haɗin-asali",
+    "wa_identity_amendment_title": "Buƙatar canza shaidar wannan wakili",
+    "wa_identity_base_link_title": "Ɗora shaidar wannan wakili a kan samfurinsa",
+    "wa_identity_base_link_custom_note": "Wannan wakili yana amfani da samfuri na musamman. Ku amince da shi a matsayin tushen shaidar wannan wakili.",
+    "wa_identity_reapproval_title": "Sake amincewa da gyaran shaida da ke akwai",
+    "wa_identity_unreadable_title": "Canjin shaida da wannan manhaja ba za ta iya karantawa ba",
+    "wa_identity_unreadable_note": "Wannan manhaja ba za ta iya nuna wannan buƙata gaba ɗaya ba, don haka ba za a iya amincewa da ita a nan ba. Taƙaitawa da bayananta suna ƙasa. Ku KI ta tare da dalili, ko ku buɗe ta a sabuwar manhaja.",
+    "wa_identity_reapproval_note": "Wannan gyaran ya gabaci amincewar rubutu daidai. Ba ya ƙidaya sai an sake amincewa da shi.",
+    "wa_identity_exact_text": "Daidai rubutun da kuke amincewa da shi",
+    "wa_identity_edited_by_wa": "Hukumar Hikima ta gyara shi",
+    "wa_identity_why": "Dalili (M-1, Daidaituwa Mai Sauyawa)",
+    "wa_identity_no_justification": "Ba a bayyana wata hujja ba.",
+    "wa_identity_objection": "Lamirin {conscience} na wakili ya nuna ƙi ({type}): {reason}",
+    "wa_identity_template_name": "Samfuri",
+    "wa_identity_template_version": "Sigar",
+    "wa_identity_manifest_digest": "Taƙaitaccen manifest",
+    "wa_identity_copy_digest": "Kwafi taƙaitacce",
+    "wa_identity_guidance_optional": "Jagora (na zaɓi don amincewa, dole ne don KI)",
+    "wa_identity_reject_why": "Don KI, ku bayyana dalili, don wakili ya iya ba da shawarar sabon rubutu",
+    "wa_identity_blocked_base_link_first": "Fara amincewa da haɗin asali na wannan wakili. Har sai an ɗora shaidarsa a kan samfurinsa, canjin da aka amince da shi ba zai iya aiki ba.",
+    "wa_identity_blocked_outer_whitespace": "Wannan rubutu yana farawa ko ƙarewa da sarari ko sabon layi, wanda wakili ba ya karɓa. Ba a canza shi a nan ba, don haka ba za a iya amincewa da shi ba. Ki shi, kuma ka roƙi wakili ya sake gabatar da shi.",
+    "invites_seat_approve": "Amince da shiga",
+    "invites_seat_approved": "Kun amince da shigarsu.",
+    "invites_seat_approved_of": "Kun amince. {signed} daga cikin {required} membobi sun sa hannu.",
+    "invites_seat_declined": "Kun ƙi amincewa da shigarsu.",
+    "invites_seat_waiting": "Ana jiran membobin ɗakin su amince da shigarsu.",
+    "invites_seat_confirm_title": "Ku amince da shigar {name}?",
+    "invites_seat_confirm_means": "Za su shiga ɗakin yanzu kuma za su iya karanta abin da yake riƙe tun daga lokacin.",
+    "invites_seat_confirm_means_quorum": "An sa wa amincewarku hannu da maɓallinku. Za su shiga da zarar {required} membobi sun amince, kuma za su iya karanta abin da ɗakin yake riƙe tun daga lokacin.",
+    "invites_notice_seated": "Sun shiga ɗakin.",
+    "invites_notice_seat_awaiting": "An rubuta amincewarku. Sauran membobi har yanzu suna buƙatar amincewa.",
+    "accord_kind_confirmed": "DAKATARWA DA AKA TABBATAR — TANA TABBATAR DA DAKATARWAR DA KE AIKI",
+    "accord_binding_confirmed": "an tabbatar · tsantsar rinjaye na masu riƙe ya tabbatar da dakatarwar da aka ambata wadda ke aiki tuni. Ba sabuwar dakatarwa ba ce kuma ba sanarwa ba ce.",
+    "constitutional_halt_not_halted": "Babu dakatarwa da ke aiki a wannan kumburi.",
+    "constitutional_halt_lone": "Mai riƙe guda ya dakatar da wannan kumburi. Dakatarwar za ta ƙare sai dai idan tsantsar rinjaye na masu riƙe ya tabbatar da ita.",
+    "constitutional_halt_lone_lapses": "Mai riƙe guda ya dakatar da wannan kumburi. Dakatarwar za ta ƙare a {time} sai dai idan tsantsar rinjaye na masu riƙe ya tabbatar da ita.",
+    "constitutional_halt_confirmed": "Tsantsar rinjaye na masu riƙe ya tabbatar da wannan dakatarwa. Tana nan a aiki har sai masu riƙe sun ci gaba da aiki.",
+    "constitutional_halt_lapsed": "Babu dakatarwa da ke aiki. Dakatarwar ƙarshe ta ƙare domin babu rinjayen masu riƙe da ya tabbatar da ita a cikin lokaci.",
+    "constitutional_armed_yes": "A shirye: genesis yana aiki, an zaunar da masu riƙensa, kuma wannan kumburi ya karɓi wannan tushen amincewa, don haka dakatarwar mai riƙe tana kaiwa gare shi.",
+    "constitutional_armed_no": "Ba a shirye ba: dakatarwar mai riƙe ba za ta kai wannan kumburi ba.",
+    "constitutional_armed_unknown": "Ba a san ko dakatarwar mai riƙe za ta kai wannan kumburi ba: wannan kumburi ba ya ba da rahoton hakan.",
+    "constitutional_holders_count_m_unknown": "Masu riƙe da yarjejeniya {n}. Kumburin bai bayar da rahoton yawan waɗanda dole ne su yarda ba."
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Wanda ke bitar daidaitawar wannan ɗaki kaɗai ne zai iya yanke hukunci kan ƙara.",
     "unknown_outcome": "Hukunci yana cewa alamar za ta kasance, cewa ƙarar daidai ce a wani ɓangare, ko cewa an cire alamar.",
     "nothing_to_rule": "Babu wanda ya ɗaukaka ƙara kan alamar wannan abu, don haka babu abin da za a yanke hukunci a kai.",
-    "appeal_failed": "Ba a iya sa hannu da rubuta ƙarar ba, don haka babu abin da ya canza."
+    "appeal_failed": "Ba a iya sa hannu da rubuta ƙarar ba, don haka babu abin da ya canza.",
+    "nothing_to_take_down": "Wannan abu ba shi da keɓaɓɓen abun ciki da za a cire.",
+    "takedown_needs_reason": "Ku faɗi dalilin da ya sa kuke cire wannan, da kalmominku.",
+    "takedown_failed": "Ba a iya sa hannu da rubuta cirewar ba, don haka babu abin da ya canza."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "awaiting_key": "Bytes nasa suna nan, amma maɓallin wannan na'urar dominsu bai isa ba tukuna. Yana biye da kansa; sake gwadawa nan da ƴan lokaci.",
     "not_a_member": "Ba ku cikin mambobin wannan ɗakin ba.",
     "withheld_by_moderation": "Mai kula da wannan ɗaki ya yiwa wannan fayil ɗin alama, don haka yana zama a ɓoye har sai kun zaɓi ganin shi.",
-    "flagged_by_moderation": "mai kula da wannan ɗaki ya yiwa wannan fayil ɗin alama; yana zama a cikin ɗakin muddin alamar take nan"
+    "flagged_by_moderation": "mai kula da wannan ɗaki ya yiwa wannan fayil ɗin alama; yana zama a cikin ɗakin muddin alamar take nan",
+    "no_rendition": "Wannan fayil ba shi da preview da kumburi zai iya yi masa.",
+    "image_too_large": "Wannan hoto ya girma sosai don kumburi ya iya yin preview nasa.",
+    "image_undecodable": "Kumburi bai iya karanta wannan hoto don yin preview ba.",
+    "unknown_rendition": "Manhajar ta nemi irin preview wanda kumburi ba ya yi."
   },
   "notes": {
     "author_signer_unavailable": "Wannan kumburi ba zai iya sa hannu a madadinku yanzu ba, don haka ba a rubuta bayani ba.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Ka'idar ɗakin na buƙatar ƙarin sa hannu kafin wannan canjin ya fara aiki.",
     "store_unavailable": "Kumburin bai iya karanta ko rubuta kundin adireshinsa ba.",
     "write_failed": "Kumburin bai iya rubuta canjin ba.",
-    "two_people_only": "Ɗaki yana riƙe da mutum biyu a yanzu."
+    "two_people_only": "Ɗaki yana riƙe da mutum biyu a yanzu.",
+    "room_full": "Wannan ɗaki ya cika."
   },
   "partnership_queue": {
     "title": "Haɗin gwiwa da wannan wakili",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "Raba allon ku ba ya samuwa a wannan kumburi tukuna.",
     "leave_reason_unknown": "Wannan ba dalili ba ne na barin kiran.",
     "video_two_people_only": "Bidiyo da raba allo suna aiki ne kawai a kiraye-kiraye tsakanin mutane biyu a yanzu. Wannan kiran yana da fiye da haka, don haka murya ne kawai. Idan kyamararku a kunne take, za ta sake fara aikawa idan kiran ya koma mutane biyu.",
-    "relay_canonical_audio_only": "Bidiyonsu ba zai iya isa gare ku a yanzu ba: hanyar da ke tsakaninku tana ɗauke da sauti kawai. Har yanzu kuna iya jin su."
+    "relay_canonical_audio_only": "Bidiyonsu ba zai iya isa gare ku a yanzu ba: hanyar da ke tsakaninku tana ɗauke da sauti kawai. Har yanzu kuna iya jin su.",
+    "share_already_live": "Kuna raba allon ku tuni.",
+    "no_share": "Ba ku raba allon ku ba."
   },
   "decisions": {
     "not_found": "Wannan shawarar ba ta ƙara buɗewa gare ku ba.",
     "awaiting_members": "An rubuta amsarku. Sauran membobi har yanzu suna buƙatar amincewa kafin wannan ya fara aiki."
+  },
+  "wa": {
+    "resolve_one_subject": "Ku amince da ko dai rubutun ko taƙaitaccen samfuri, ba dukansu biyu ba.",
+    "base_link_digest_requires_approve": "Za a iya aika taƙaitaccen samfuri ne kawai tare da Amincewa.",
+    "base_link_digest_mismatch": "Wannan taƙaitaccen samfuri bai dace da wanda wakili ya ba da shawara ba. Ku sabunta sannan ku sake gwadawa.",
+    "amendment_text_requires_approve": "Za a iya aika rubutun gyara ne kawai tare da Amincewa.",
+    "no_signed_request_row": "Wannan jinkiri ba shi da buƙatar da aka sa hannu a kai, don haka babu abin da amsarku da aka sa hannu za ta amsa."
+  },
+  "deferral": {
+    "unknown_request": "Kumburin bai san buƙatar wannan jinkiri ba."
   }
 }

@@ -564,6 +564,11 @@ class PromptManifest(BaseModel):
     policy_sha256: str
     assembler_version: str
     guard_mode: AssemblyMode
+    facts: PolicyFacts = Field(
+        default_factory=PolicyFacts,
+        description="The trusted-state facts the guard evaluated this call's predicates against (trusted_rule_in_force "
+        "is signed_guidance_in_force or amendment_in_force)",
+    )
     guard_violations: List[GuardViolation] = Field(default_factory=list)
     segments: List[SegmentRecord] = Field(default_factory=list)
     messages_sha256: str = Field(..., description="sha256 of the assembled messages, as the LLM bus hashes them")

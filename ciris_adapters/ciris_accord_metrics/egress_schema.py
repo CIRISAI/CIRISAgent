@@ -302,6 +302,12 @@ _CM_VIOLATION: Dict[str, FieldSpec] = {
     "detail": _reason(),  # why, never the segment's text (PromptManifest contract)
     "action": _tok(D),
 }
+_CM_FACTS: Dict[str, FieldSpec] = {
+    "signed_guidance_in_force": _bool(D),
+    "amendment_in_force": _bool(D),
+    "id_scoped": _bool(D),
+    "advisory_rule": _bool(D),
+}
 CONTEXT_MANIFEST_SCHEMA: Dict[str, FieldSpec] = {
     "call_id": _ident(),
     "task_id": _ident(),
@@ -316,6 +322,8 @@ CONTEXT_MANIFEST_SCHEMA: Dict[str, FieldSpec] = {
     "policy_sha256": _tok(D),
     "assembler_version": _ident(),
     "guard_mode": _tok(D),
+    # The PolicyFacts the guard evaluated (2.23.2): checkable against the scenario independently of the segments.
+    "facts": _obj(_CM_FACTS, D),
     "guard_violations": _list(_obj(_CM_VIOLATION, D), max_items=CONTEXT_MANIFEST_MAX_VIOLATIONS),
     "segments": _list(_obj(_CM_SEGMENT, D), max_items=CONTEXT_MANIFEST_MAX_SEGMENTS),
     "messages_sha256": _tok(D),

@@ -8,7 +8,7 @@ failed runs whose tests all passed (run 39664086947, 38/38).
 import yaml
 
 from ciris_adapters.mock_llm.responses import create_response
-from ciris_adapters.mock_llm.responses_action_selection import _with_mock_params
+from ciris_adapters.mock_llm.responses_action_selection import MOCK_M1_JUSTIFICATION, _with_mock_params
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
 from ciris_engine.logic.dma.fsaspdma import FSASPDMALLMResult
 from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
@@ -48,7 +48,11 @@ def test_addresses_the_requested_memorize_with_the_same_content():
     # An IDENTITY write comes back without `content`, the way a live second pass
     # names its attributes (RATCHET run 39788730490), so wa_identity_approval
     # exercises that shape; the text is the same the action-selection pass stored.
-    assert result.attributes == {"created_by": "agent", "statement": "qa_wa_identity_ok_concept_identity"}
+    assert result.attributes == {
+        "created_by": "agent",
+        "statement": "qa_wa_identity_ok_concept_identity",
+        "m1_justification": MOCK_M1_JUSTIFICATION,  # an identity write states its M-1 (#1366)
+    }
 
 
 def test_other_scopes_keep_content_for_the_memory_modules():

@@ -4178,7 +4178,65 @@
     "call_h264_failed_load": "Codec H.264 berhasil diunduh, tetapi komputer ini tidak dapat memuatnya. Coba lagi, atau nonaktifkan video H.264, yang akan menghapus codec tersebut.",
     "call_h264_needed": "Seseorang dalam panggilan ini mengirim video H.264. Aktifkan video H.264 untuk melihatnya.",
     "call_h264_licence": "Tampilkan lisensi",
-    "call_h264_licence_hide": "Sembunyikan lisensi"
+    "call_h264_licence_hide": "Sembunyikan lisensi",
+    "accord_edition2_offline_ceremony": "Node ini menjalankan mesh v62. Akar kepercayaannya dibuat secara offline, dengan alat upacara. Oleh karena itu, aplikasi ini tidak menawarkan tindakan-tindakan dari mesh sebelumnya di sini: mengadmisi node, mengubah node kanonik, mencetak ulang akar kepercayaan, memberkati pekerja CI, atau melimpahkan tugas.",
+    "accord_edition_unknown": "Node ini belum menyatakan edisi mesh yang dijalankannya, sehingga tindakan yang berbeda antar edisi tidak ditawarkan sampai node ini menyatakannya.",
+    "invites_seat_approve": "Setujui bergabung",
+    "invites_seat_approved": "Anda menyetujui mereka bergabung.",
+    "invites_seat_approved_of": "Anda telah menyetujui. {signed} dari {required} anggota telah menandatangani.",
+    "invites_seat_declined": "Anda menolak mereka bergabung.",
+    "invites_seat_waiting": "Menunggu anggota ruangan menyetujui mereka bergabung.",
+    "invites_seat_confirm_title": "Setujui {name} bergabung?",
+    "invites_seat_confirm_means": "Mereka langsung bergabung dengan ruangan dan dapat membaca apa yang dimilikinya sejak saat itu.",
+    "invites_seat_confirm_means_quorum": "Persetujuan Anda ditandatangani dengan kunci Anda. Mereka bergabung setelah {required} anggota menyetujui, dan dapat membaca apa yang dimiliki ruangan sejak saat itu.",
+    "invites_notice_seated": "Mereka telah bergabung dengan ruangan.",
+    "invites_notice_seat_awaiting": "Persetujuan Anda telah tercatat. Anggota lain masih perlu menyetujui.",
+    "accord_kind_confirmed": "PENGHENTIAN TERKONFIRMASI — MENGONFIRMASI PENGHENTIAN YANG BERLAKU",
+    "accord_binding_confirmed": "dikonfirmasi · mayoritas ketat pemegang mengonfirmasi penghentian bernama yang sudah berlaku. Ini bukan penghentian baru dan bukan pemberitahuan.",
+    "constitutional_halt_not_halted": "Tidak ada penghentian yang berlaku pada node ini.",
+    "constitutional_halt_lone": "Satu pemegang telah menghentikan node ini. Penghentian ini akan berakhir kecuali mayoritas ketat pemegang mengonfirmasinya.",
+    "constitutional_halt_lone_lapses": "Satu pemegang telah menghentikan node ini. Penghentian ini akan berakhir pada {time} kecuali mayoritas ketat pemegang mengonfirmasinya.",
+    "constitutional_halt_confirmed": "Mayoritas ketat pemegang telah mengonfirmasi penghentian ini. Penghentian ini tetap berlaku hingga para pemegang melanjutkan kembali.",
+    "constitutional_halt_lapsed": "Tidak ada penghentian yang berlaku. Penghentian terakhir berakhir karena tidak ada mayoritas pemegang yang mengonfirmasinya tepat waktu.",
+    "constitutional_armed_yes": "Aktif: genesis berlaku, para pemegangnya telah didudukkan, dan node ini menerima akar kepercayaan tersebut, sehingga penghentian oleh pemegang menjangkau node ini.",
+    "constitutional_armed_no": "Tidak aktif: penghentian oleh pemegang tidak akan menjangkau node ini.",
+    "constitutional_armed_unknown": "Tidak diketahui apakah penghentian oleh pemegang akan menjangkau node ini: node ini tidak melaporkannya.",
+    "constitutional_holders_count_m_unknown": "{n} pemegang accord. Node ini tidak melaporkan berapa banyak di antara mereka yang harus setuju.",
+    "chat_file_added": "{who} menambahkan {name} ke ruangan",
+    "chat_file_added_you": "Anda menambahkan {name} ke ruangan",
+    "wa_identity_amendment_title": "Permintaan untuk mengubah identitas agen ini",
+    "wa_identity_base_link_title": "Tautkan identitas agen ini ke templatenya",
+    "wa_identity_base_link_custom_note": "Agen ini menjalankan template kustom. Setujui template tersebut sebagai dasar identitas agen ini.",
+    "wa_identity_reapproval_title": "Setujui kembali amendemen identitas yang sudah ada",
+    "wa_identity_unreadable_title": "Perubahan identitas yang tidak dapat dibaca oleh aplikasi ini",
+    "wa_identity_unreadable_note": "Aplikasi ini tidak dapat menampilkan permintaan ini secara lengkap, sehingga tidak dapat disetujui di sini. Ringkasan dan detailnya ada di bawah. Tolak dengan alasan, atau buka di aplikasi yang lebih baru.",
+    "wa_identity_reapproval_note": "Amendemen ini dibuat sebelum adanya persetujuan teks-persis. Amendemen ini tidak berlaku sampai disetujui kembali.",
+    "wa_identity_exact_text": "Teks persis yang Anda setujui",
+    "wa_identity_edited_by_wa": "Diedit oleh Otoritas Bijak",
+    "wa_identity_why": "Alasan (M-1, Koherensi Adaptif)",
+    "wa_identity_no_justification": "Tidak ada alasan yang disebutkan.",
+    "wa_identity_objection": "Nurani {conscience} agen keberatan ({type}): {reason}",
+    "wa_identity_template_name": "Template",
+    "wa_identity_template_version": "Versi",
+    "wa_identity_manifest_digest": "Digest manifest",
+    "wa_identity_copy_digest": "Salin digest",
+    "wa_identity_guidance_optional": "Panduan (opsional untuk menyetujui, diperlukan untuk menolak)",
+    "wa_identity_reject_why": "Untuk menolak, sebutkan alasannya, agar agen dapat mengajukan rumusan baru",
+    "wa_identity_blocked_base_link_first": "Setujui tautan dasar agen ini terlebih dahulu. Sampai identitasnya ditautkan ke templatenya, perubahan yang disetujui tidak dapat diberlakukan.",
+    "wa_identity_blocked_outer_whitespace": "Teks ini diawali atau diakhiri dengan spasi atau jeda baris, yang ditolak oleh agen. Teks ini tidak diubah di sini, sehingga tidak dapat disetujui. Tolak permintaan ini dan minta agen mengajukannya kembali.",
+    "wa_identity_blocked_no_digest": "Permintaan ini tidak memiliki digest template yang lengkap, sehingga tidak dapat disetujui.",
+    "wa_identity_blocked_agent_cannot_bind": "Agen ini tidak dapat mengaitkan persetujuan dengan permintaan persis ini, sehingga tidak dapat disetujui di sini.",
+    "wa_identity_approved": "Disetujui. Nurani agen akan meninjaunya sebelum diberlakukan.",
+    "wa_identity_rejected": "Ditolak. Agen dapat mengajukan rumusan baru.",
+    "wa_identity_not_resolved": "Permintaan ini belum diselesaikan. Otoritas Bijak lain mungkin telah memutuskannya lebih dulu.",
+    "wa_identity_failed": "Keputusan tidak dapat dikirim: {detail}",
+    "wa_identity_receipt_request": "Minta resi",
+    "wa_identity_receipt_response": "Resi jawaban Anda",
+    "wa_identity_profile_unanchored": "Identitas agen ini belum ditautkan. Setujui tautan dasarnya terlebih dahulu.",
+    "wa_identity_profile_mismatch": "Identitas agen ini tidak cocok dengan template yang telah disetujui. Tidak ada perubahan identitas yang berlaku sampai hal ini diselesaikan.",
+    "wa_identity_profile_contested": "Identitas agen ini sedang disengketakan. Tidak ada perubahan identitas yang berlaku sampai hal ini diselesaikan.",
+    "wa_identity_profile_unknown": "Agen ini melaporkan status identitas yang tidak dikenali oleh aplikasi ini.",
+    "wa_identity_open_base_link": "Buka permintaan tautan dasar"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -5632,7 +5690,10 @@
     "not_a_reviewer": "Hanya orang yang meninjau moderasi ruang ini yang dapat memutuskan banding.",
     "unknown_outcome": "Sebuah putusan menyatakan tanda tetap berlaku, banding benar sebagian, atau tanda dicabut.",
     "nothing_to_rule": "Tidak ada yang mengajukan banding atas tanda item itu, sehingga tidak ada yang perlu diputuskan.",
-    "appeal_failed": "Banding tidak dapat ditandatangani dan dicatat, sehingga tidak ada yang berubah."
+    "appeal_failed": "Banding tidak dapat ditandatangani dan dicatat, sehingga tidak ada yang berubah.",
+    "nothing_to_take_down": "Item itu tidak memiliki konten terpisah untuk dihapus.",
+    "takedown_needs_reason": "Jelaskan alasan Anda menghapus ini, dengan kata-kata Anda sendiri.",
+    "takedown_failed": "Penghapusan tidak dapat ditandatangani dan dicatat, sehingga tidak ada yang berubah."
   },
   "operator": {
     "carriage": {
@@ -6260,7 +6321,11 @@
     "withdrawn": "Penulisnya telah menarik berkas ini. Bita-bitanya tidak lagi disajikan di mana pun.",
     "awaiting_key": "Byte-nya sudah ada di sini, tetapi kunci perangkat ini untuknya belum tiba. Kunci itu akan menyusul dengan sendirinya; coba lagi sebentar lagi.",
     "withheld_by_moderation": "Seorang moderator ruang ini menandai berkas ini, sehingga tetap tersembunyi sampai Anda memilih untuk melihatnya.",
-    "flagged_by_moderation": "seorang moderator ruang ini menandai berkas ini; berkas tetap berada di ruang selama tanda tersebut berlaku"
+    "flagged_by_moderation": "seorang moderator ruang ini menandai berkas ini; berkas tetap berada di ruang selama tanda tersebut berlaku",
+    "no_rendition": "Berkas ini tidak memiliki pratinjau yang dapat dibuat oleh node.",
+    "image_too_large": "Gambar ini terlalu besar bagi node untuk membuat pratinjau.",
+    "image_undecodable": "Node tidak dapat membaca gambar ini untuk membuat pratinjau.",
+    "unknown_rendition": "Aplikasi meminta jenis pratinjau yang tidak dibuat oleh node."
   },
   "notes": {
     "author_signer_unavailable": "Node ini tidak dapat menandatangani sebagai Anda saat ini, sehingga catatan tidak ditulis.",
@@ -6424,7 +6489,8 @@
     "quorum_pending": "Aturan ruangan memerlukan lebih banyak tanda tangan sebelum perubahan ini berlaku.",
     "store_unavailable": "Node tidak dapat membaca atau menulis direktorinya.",
     "write_failed": "Node tidak dapat menulis perubahan tersebut.",
-    "two_people_only": "Untuk saat ini, sebuah ruangan menampung dua orang."
+    "two_people_only": "Untuk saat ini, sebuah ruangan menampung dua orang.",
+    "room_full": "Ruangan ini penuh."
   },
   "partnership_queue": {
     "title": "Bermitra dengan agen ini",
@@ -6603,10 +6669,22 @@
     "share_unavailable": "Berbagi layar belum tersedia di node ini.",
     "leave_reason_unknown": "Itu bukan alasan untuk meninggalkan panggilan.",
     "video_two_people_only": "Video dan berbagi layar untuk saat ini hanya berfungsi dalam panggilan antara dua orang. Panggilan ini memiliki lebih dari itu, sehingga hanya suara. Jika kamera Anda aktif, pengiriman video akan dimulai lagi saat panggilan kembali menjadi dua orang.",
-    "relay_canonical_audio_only": "Video mereka tidak dapat menjangkau Anda saat ini: jalur antara Anda dan mereka hanya membawa suara. Anda tetap dapat mendengar mereka."
+    "relay_canonical_audio_only": "Video mereka tidak dapat menjangkau Anda saat ini: jalur antara Anda dan mereka hanya membawa suara. Anda tetap dapat mendengar mereka.",
+    "share_already_live": "Anda sudah membagikan layar Anda.",
+    "no_share": "Anda tidak sedang membagikan layar Anda."
   },
   "decisions": {
     "not_found": "Keputusan itu tidak lagi terbuka untuk Anda.",
     "awaiting_members": "Jawaban Anda telah tercatat. Anggota lain masih perlu menyetujui sebelum ini berlaku."
+  },
+  "wa": {
+    "base_link_digest_mismatch": "Digest template tersebut tidak cocok dengan yang diajukan oleh agen ini. Segarkan dan coba lagi.",
+    "amendment_text_requires_approve": "Teks amandemen hanya dapat dikirim dengan Setujui.",
+    "no_signed_request_row": "Penangguhan ini tidak memiliki permintaan yang ditandatangani, sehingga tidak ada yang dapat dijawab oleh jawaban Anda yang ditandatangani.",
+    "resolve_one_subject": "Setujui teks atau digest template, bukan keduanya.",
+    "base_link_digest_requires_approve": "Digest template hanya dapat dikirim dengan Setujui."
+  },
+  "deferral": {
+    "unknown_request": "Node ini tidak mengetahui permintaan dari penangguhan ini."
   }
 }

@@ -4011,7 +4011,65 @@
     "call_h264_failed_load": "Il codec H.264 è stato scaricato, ma questo computer non è riuscito a caricarlo. Riprova, oppure disattiva il video H.264, il che eliminerà il codec.",
     "call_h264_needed": "Qualcuno in questa chiamata sta inviando video H.264. Attiva il video H.264 per vederlo.",
     "call_h264_licence": "Mostra la licenza",
-    "call_h264_licence_hide": "Nascondi la licenza"
+    "call_h264_licence_hide": "Nascondi la licenza",
+    "accord_edition2_offline_ceremony": "Questo nodo esegue la mesh v62. La sua radice di fiducia viene creata offline, con lo strumento di cerimonia. Per questo motivo questa app non offre qui le azioni della mesh precedente: ammettere un nodo, cambiare un nodo canonico, ri-coniare la radice di fiducia, benedire i worker CI, o conferire un dovere.",
+    "accord_edition_unknown": "Questo nodo non ha dichiarato quale edizione della mesh esegue, quindi le azioni che differiscono tra le edizioni non vengono offerte finché non lo farà.",
+    "chat_file_added": "{who} ha aggiunto {name} alla stanza",
+    "chat_file_added_you": "Hai aggiunto {name} alla stanza",
+    "invites_seat_approve": "Approva l'ingresso",
+    "invites_seat_approved": "Hai approvato il loro ingresso.",
+    "invites_seat_approved_of": "Hai approvato. {signed} membri su {required} hanno firmato.",
+    "invites_seat_declined": "Hai rifiutato il loro ingresso.",
+    "invites_seat_waiting": "In attesa che i membri della stanza approvino il loro ingresso.",
+    "invites_seat_confirm_title": "Approvare l'ingresso di {name}?",
+    "invites_seat_confirm_means": "Entrano subito nella stanza e possono leggere da quel momento ciò che contiene.",
+    "invites_seat_confirm_means_quorum": "La tua approvazione viene firmata con la tua chiave. Entrano una volta che {required} membri hanno approvato, e possono leggere da quel momento ciò che la stanza contiene.",
+    "invites_notice_seated": "Sono entrati nella stanza.",
+    "invites_notice_seat_awaiting": "La tua approvazione è stata registrata. Gli altri membri devono ancora approvare.",
+    "accord_kind_confirmed": "ARRESTO CONFERMATO — CONFERMA L'ARRESTO IN VIGORE",
+    "accord_binding_confirmed": "confermato · una maggioranza netta dei detentori conferma l'arresto indicato che è già in vigore. Non è un nuovo arresto né un avviso.",
+    "constitutional_halt_not_halted": "Nessun arresto è in vigore su questo nodo.",
+    "constitutional_halt_lone": "Un detentore ha arrestato questo nodo. L'arresto decade a meno che una maggioranza netta dei detentori non lo confermi.",
+    "constitutional_halt_lone_lapses": "Un detentore ha arrestato questo nodo. L'arresto decade alle {time} a meno che una maggioranza netta dei detentori non lo confermi.",
+    "constitutional_halt_confirmed": "Una maggioranza netta dei detentori ha confermato questo arresto. Resta in vigore finché i detentori non riprendono.",
+    "constitutional_halt_lapsed": "Nessun arresto è in vigore. L'ultimo arresto è decaduto perché nessuna maggioranza dei detentori lo ha confermato in tempo.",
+    "constitutional_armed_yes": "Armato: una genesi è in vigore, i suoi detentori sono insediati, e questo nodo accetta quella radice di fiducia, quindi l'arresto di un detentore lo raggiunge.",
+    "constitutional_armed_no": "Non armato: l'arresto di un detentore non raggiungerebbe questo nodo.",
+    "constitutional_armed_unknown": "Non è noto se l'arresto di un detentore raggiungerebbe questo nodo: questo nodo non lo comunica.",
+    "constitutional_holders_count_m_unknown": "{n} detentore/i dell'accord. Il nodo non ha comunicato quanti di essi debbano essere d'accordo.",
+    "wa_identity_amendment_title": "Richiesta di modifica dell'identità di questo agente",
+    "wa_identity_base_link_title": "Ancora l'identità di questo agente al proprio modello",
+    "wa_identity_base_link_custom_note": "Questo agente usa un modello personalizzato. Approvalo come base dell'identità di questo agente.",
+    "wa_identity_reapproval_title": "Riapprova una modifica dell'identità esistente",
+    "wa_identity_unreadable_title": "Una modifica dell'identità che questa app non può leggere",
+    "wa_identity_unreadable_note": "Questa app non può mostrare questa richiesta per intero, quindi non può essere approvata qui. Il riepilogo e i dettagli sono riportati di seguito. Rifiutala indicando un motivo, oppure aprila con una versione più recente dell'app.",
+    "wa_identity_reapproval_note": "Questa modifica è precedente all'approvazione del testo esatto. Non è valida finché non viene approvata di nuovo.",
+    "wa_identity_exact_text": "Il testo esatto che stai approvando",
+    "wa_identity_edited_by_wa": "Modificato da una Wise Authority",
+    "wa_identity_why": "Motivo (M-1, Coerenza adattiva)",
+    "wa_identity_no_justification": "Non è stata indicata alcuna motivazione.",
+    "wa_identity_objection": "La coscienza {conscience} dell'agente ha sollevato un'obiezione ({type}): {reason}",
+    "wa_identity_template_name": "Modello",
+    "wa_identity_template_version": "Versione",
+    "wa_identity_manifest_digest": "Digest del manifest",
+    "wa_identity_copy_digest": "Copia digest",
+    "wa_identity_guidance_optional": "Indicazioni (facoltative per approvare, necessarie per rifiutare)",
+    "wa_identity_reject_why": "Per rifiutare, indica il motivo, così l'agente potrà proporre una nuova formulazione",
+    "wa_identity_blocked_base_link_first": "Approva prima il collegamento di base di questo agente. Finché la sua identità non è ancorata al proprio modello, una modifica approvata non può essere applicata.",
+    "wa_identity_blocked_outer_whitespace": "Questo testo inizia o termina con uno spazio o un'interruzione di riga, cosa che l'agente rifiuta. Non viene modificato qui, quindi non può essere approvato. Rifiutalo e chiedi all'agente di riproporlo.",
+    "wa_identity_blocked_no_digest": "Questa richiesta non ha un digest completo del modello, quindi non può essere approvata.",
+    "wa_identity_blocked_agent_cannot_bind": "Questo agente non può collegare un'approvazione a questa richiesta esatta, quindi non può essere approvata qui.",
+    "wa_identity_approved": "Approvato. Le coscienze dell'agente lo esaminano prima che venga applicato.",
+    "wa_identity_rejected": "Rifiutato. L'agente può proporre una nuova formulazione.",
+    "wa_identity_not_resolved": "Questa richiesta non è stata risolta. Un'altra Wise Authority potrebbe averla già decisa.",
+    "wa_identity_failed": "Impossibile inviare la decisione: {detail}",
+    "wa_identity_receipt_request": "Richiedi ricevuta",
+    "wa_identity_receipt_response": "Ricevuta della tua risposta",
+    "wa_identity_profile_unanchored": "L'identità di questo agente non è ancora ancorata. Approva prima il suo collegamento di base.",
+    "wa_identity_profile_mismatch": "L'identità di questo agente non corrisponde al proprio modello approvato. Nessuna modifica all'identità verrà applicata finché la questione non sarà risolta.",
+    "wa_identity_profile_contested": "L'identità di questo agente è contestata. Nessuna modifica all'identità verrà applicata finché la questione non sarà risolta.",
+    "wa_identity_profile_unknown": "Questo agente ha segnalato uno stato dell'identità che questa app non riconosce.",
+    "wa_identity_open_base_link": "Apri la richiesta di collegamento di base"
   },
   "prompts": {
     "dma": {
@@ -5659,7 +5717,10 @@
     "not_a_reviewer": "Solo chi riesamina la moderazione di questa stanza può decidere un ricorso in appello.",
     "unknown_outcome": "Una decisione stabilisce che la segnalazione resta, che il ricorso è parzialmente fondato, oppure che la segnalazione viene rimossa.",
     "nothing_to_rule": "Nessuno ha presentato ricorso contro la segnalazione di quell'elemento, quindi non c'è nulla su cui decidere.",
-    "appeal_failed": "Non è stato possibile firmare e registrare il ricorso, quindi nulla è cambiato."
+    "appeal_failed": "Non è stato possibile firmare e registrare il ricorso, quindi nulla è cambiato.",
+    "nothing_to_take_down": "Quell'elemento non ha contenuto separato da rimuovere.",
+    "takedown_needs_reason": "Spiega, con parole tue, perché stai rimuovendo questo.",
+    "takedown_failed": "Non è stato possibile firmare e registrare la rimozione, quindi nulla è cambiato."
   },
   "operator": {
     "carriage": {
@@ -6287,7 +6348,11 @@
     "withdrawn": "Il suo autore ha ritirato questo file. I byte non vengono più forniti da nessuna parte.",
     "awaiting_key": "I suoi byte sono qui, ma la chiave di questo dispositivo per essi non è ancora arrivata. Arriverà da sola; riprova a breve.",
     "withheld_by_moderation": "Un moderatore di questa stanza ha segnalato questo file, quindi resta nascosto finché non scegli di vederlo.",
-    "flagged_by_moderation": "un moderatore di questa stanza ha segnalato questo file; resta nella stanza finché la segnalazione è valida"
+    "flagged_by_moderation": "un moderatore di questa stanza ha segnalato questo file; resta nella stanza finché la segnalazione è valida",
+    "no_rendition": "Questo file non ha un'anteprima che il nodo possa generare.",
+    "image_too_large": "Questa immagine è troppo grande perché il nodo possa generarne un'anteprima.",
+    "image_undecodable": "Il nodo non è riuscito a leggere questa immagine per generarne un'anteprima.",
+    "unknown_rendition": "L'app ha richiesto un tipo di anteprima che il nodo non genera."
   },
   "notes": {
     "author_signer_unavailable": "Questo nodo non può firmare come te in questo momento, quindi la nota non è stata scritta.",
@@ -6451,7 +6516,8 @@
     "quorum_pending": "La regola della stanza richiede più firme prima che questa modifica abbia effetto.",
     "store_unavailable": "Il nodo non è riuscito a leggere o scrivere la propria directory.",
     "write_failed": "Il nodo non è riuscito a scrivere la modifica.",
-    "two_people_only": "Per ora, una stanza ospita due persone."
+    "two_people_only": "Per ora, una stanza ospita due persone.",
+    "room_full": "Questa stanza è piena."
   },
   "partnership_queue": {
     "title": "Partnership con questo agente",
@@ -6630,10 +6696,22 @@
     "share_unavailable": "La condivisione dello schermo non è ancora disponibile su questo nodo.",
     "leave_reason_unknown": "Questo non è un motivo per lasciare la chiamata.",
     "video_two_people_only": "Per ora, video e condivisione dello schermo funzionano nelle chiamate tra due persone. Questa chiamata ne ha di più, quindi è solo vocale. Se la tua fotocamera è attiva, riprenderà a trasmettere quando la chiamata tornerà a due persone.",
-    "relay_canonical_audio_only": "Il loro video non può raggiungerti in questo momento: il percorso tra voi trasporta solo l'audio. Puoi comunque sentirli."
+    "relay_canonical_audio_only": "Il loro video non può raggiungerti in questo momento: il percorso tra voi trasporta solo l'audio. Puoi comunque sentirli.",
+    "share_already_live": "Stai già condividendo lo schermo.",
+    "no_share": "Non stai condividendo lo schermo."
   },
   "decisions": {
     "not_found": "Questa decisione non è più aperta per te.",
     "awaiting_members": "La tua risposta è stata registrata. Gli altri membri devono ancora approvare prima che questa decisione abbia effetto."
+  },
+  "wa": {
+    "resolve_one_subject": "Approva il testo oppure il digest del modello, non entrambi.",
+    "base_link_digest_requires_approve": "Un digest del modello può essere inviato solo con Approva.",
+    "base_link_digest_mismatch": "Quel digest del modello non corrisponde a quello proposto da questo agente. Aggiorna e riprova.",
+    "amendment_text_requires_approve": "Il testo della modifica può essere inviato solo con Approva.",
+    "no_signed_request_row": "Questo rinvio non ha alcuna richiesta firmata, quindi non c'è nulla a cui la tua risposta firmata possa rispondere."
+  },
+  "deferral": {
+    "unknown_request": "Il nodo non conosce la richiesta di questo rinvio."
   }
 }

@@ -679,7 +679,7 @@ class _FakeCallTransport:
 
 class _CallHttpTransport(FakeTransport):
     def request(self, method, path, body=None, token=None):
-        if self.net.room and path == f"/v1/chat/{self.net.room}/call/join" and method == "POST":
+        if self.net.room and path == f"/v1/chat/{self.net.room}/call" and method == "POST":
             return xc.HttpResult(
                 200,
                 {

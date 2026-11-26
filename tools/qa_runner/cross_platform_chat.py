@@ -1156,8 +1156,8 @@ class CrossChatStage:
             # 1. Both sides join the room's call with video enabled.
             join_info: Dict[str, JsonObject] = {}
             for node in (a, b):
-                r = self._call(node, "POST", f"/v1/chat/{cid}/call/join", {"video": True})
-                trail.append(r.trail(f"{node.name} POST /v1/chat/{cid}/call/join"))
+                r = self._call(node, "POST", f"/v1/chat/{cid}/call", {"video": True})
+                trail.append(r.trail(f"{node.name} POST /v1/chat/{cid}/call"))
                 p = _payload(r.body)
                 if not (r.ok and isinstance(p, dict)):
                     raise self._fail(step, LAYER_CALL, f"{node.name} could not join the call: {r.brief()}", trail[-6:])

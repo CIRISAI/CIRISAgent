@@ -1217,10 +1217,17 @@ jobs:
           done
 
           ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
-          for port in 8080 4243 8091; do "$ADB" forward --remove "tcp:$port" >/dev/null 2>&1; done
+          for port in 8080 4243 8091 14243; do "$ADB" forward --remove "tcp:$port" >/dev/null 2>&1; done
           if ! "$ADB" forward tcp:18080 tcp:8080; then
             echo "::error::cross-platform chat: could not forward host:18080 to the emulator's :8080"
             not_run "adb forward 18080 failed"; exit 1
+          fi
+          # Android's phone app connects directly to its node on :4243 for the
+          # call frames WebSocket (mobile agent bundles carry no websockets lib).
+          # Linux connects through its agent on :8080, exercising the WS proxy.
+          if ! "$ADB" forward tcp:14243 tcp:4243; then
+            echo "::error::cross-platform chat: could not forward host:14243 to the emulator's :4243"
+            not_run "adb forward 14243 failed"; exit 1
           fi
           # The app is normally still running; if a teardown stopped it, start it
           # again -- its backend boots from its own home inside the device.
@@ -1247,6 +1254,7 @@ jobs:
           rc=0
           python -m tools.qa_runner.cross_platform_chat run \
             --node linux=http://127.0.0.1:8080 --node android=http://127.0.0.1:18080 \
+            --ws-url android=ws://127.0.0.1:14243 \
             --username qaadmin --password "qa_test_password_12345" \
             --out "$out/result.json" --summary "${GITHUB_STEP_SUMMARY:-/dev/null}" || rc=$?
 
@@ -1279,6 +1287,7 @@ jobs:
           fi
           kill "$linux_pid" 2>/dev/null
           "$ADB" forward --remove tcp:18080 >/dev/null 2>&1
+          "$ADB" forward --remove tcp:14243 >/dev/null 2>&1
           exit "$rc"
 
       - name: Collect artifacts

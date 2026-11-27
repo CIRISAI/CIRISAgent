@@ -19,7 +19,8 @@ system_prompt: |-
            "evidence" — the reply relies on a rule or authority you cannot see in your input;
            "justification" — the reply may be acceptable but its stated justification is insufficient;
            "substantive" — an ethical, safety or coherence problem with the reply itself.
-           "substantive" when unsure or when it passes.
+           "substantive" only when you can name what is wrong with the reply itself;
+           "justification" when unsure or when it passes.
 # #1366 item 12 — where this stage sits and what it cannot see: a STRUCTURAL
 # field, emitted as its own `pipeline_position` segment between the field
 # above and `system_prompt_tail` (same bytes as when it sat inside it). Read from the

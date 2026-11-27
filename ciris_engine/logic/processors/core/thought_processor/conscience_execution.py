@@ -12,7 +12,7 @@ Captures detailed results from all 6 consciences:
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from ciris_engine.logic.conscience.veto_contract import (
     action_equivalence_key,
@@ -28,8 +28,9 @@ from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
+from ciris_engine.logic.utils.deferral_text import clip_deferral_text
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string, get_user_language_from_context
-from ciris_engine.schemas.actions.parameters import PonderParams
+from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -311,7 +312,11 @@ class ConscienceExecutionPhase:
             veto_entries_of_feedback(getattr(thought_item, "conscience_feedback", None)),
         )
         available_evidence = trusted_evidence_ids(context)
-        repeated = banned_entry_for(equivalence_key, prior_record, available_evidence)
+        # A DEFER is never banned (Eric, 2026-11-27): deferring is how a veto reaches a
+        # Wise Authority, who can always overrule it. A ban on the exit is what kept
+        # sh-un-07's guidance task pondering at depth 7 for 31 rounds (RATCHET 46040465835).
+        is_defer = action_result.selected_action == HandlerActionType.DEFER
+        repeated = None if is_defer else banned_entry_for(equivalence_key, prior_record, available_evidence)
         if repeated is not None:
             return self._repeated_veto_result(action_result, repeated, prior_record, processing_context)
 
@@ -466,6 +471,15 @@ class ConscienceExecutionPhase:
                 )
                 overridden = True
                 override_reason = get_string(lang, "conscience.forced_ponder_rationale")
+
+        # A DEFER is never blocked (Eric, 2026-11-27). The consciences still review it --
+        # a dodge dressed as a principled refusal is what they look for (2026-05-03) --
+        # but what they object to goes to the Wise Authority WITH the deferral, and the
+        # deferral stands. Neither a veto nor the retry's forced PONDER may replace it.
+        if is_defer and overridden:
+            final_action = self._defer_with_objections(action_result, objections)
+            overridden = False
+            override_reason = None
 
         # Build EpistemicData from aggregated conscience results
         from ciris_engine.schemas.conscience.core import EpistemicData
@@ -663,7 +677,11 @@ class ConscienceExecutionPhase:
     def _objections_of(
         self, entries: Sequence[Any], results: Sequence[Any], fingerprint: str, equivalence_key: str = ""
     ) -> List[Tuple[int, VetoObjection]]:
-        """Each veto as a typed objection, in registry priority order; untyped reads as SUBSTANTIVE."""
+        """Each veto as a typed objection, in registry priority order; untyped reads as JUSTIFICATION.
+
+        A conscience that did not say what kind of objection it has cannot know the
+        action was wrong (Eric, 2026-11-27), so the unknown case does not ban.
+        """
         objections: List[Tuple[int, VetoObjection]] = []
         for index, (entry, result) in enumerate(zip(entries, results)):
             if not self._is_veto(result):
@@ -677,7 +695,7 @@ class ConscienceExecutionPhase:
                         veto_id=f"veto_{uuid.uuid4().hex[:12]}",
                         conscience=entry.name,
                         objection_type=(
-                            objection_type if isinstance(objection_type, ObjectionType) else ObjectionType.SUBSTANTIVE
+                            objection_type if isinstance(objection_type, ObjectionType) else ObjectionType.JUSTIFICATION
                         ),
                         reason=result.reason or "",
                         held_trusted_rule=bool(getattr(result, "held_trusted_rule", None) or held_ids),
@@ -820,6 +838,23 @@ class ConscienceExecutionPhase:
         from ciris_engine.logic.persistence.models.tasks import append_task_vetoes
 
         append_task_vetoes(task_id, entries)
+
+    @staticmethod
+    def _defer_with_objections(
+        action_result: ActionSelectionDMAResult, objections: Sequence[Tuple[int, VetoObjection]]
+    ) -> ActionSelectionDMAResult:
+        """The DEFER as drafted, carrying the consciences' objections to the Wise Authority."""
+        params = action_result.action_parameters
+        if not isinstance(params, DeferParams):
+            return action_result
+        lines = [
+            clip_deferral_text(f"{o.conscience} ({o.objection_type.value}): {o.reason}") for _, o in objections if o.reason
+        ]
+        if not lines:
+            return action_result
+        context: Dict[str, Union[str, List[str]]] = dict(params.context or {})
+        context["conscience_objections"] = lines
+        return action_result.model_copy(update={"action_parameters": params.model_copy(update={"context": context})})
 
     def _repeated_veto_result(
         self,

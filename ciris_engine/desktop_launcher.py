@@ -76,15 +76,48 @@ def find_bundled_jre() -> Optional[str]:
     return None
 
 
+def payload_prefix(executable: Optional[str] = None) -> Optional[Path]:
+    """The desktop-payload install prefix this interpreter runs from, if any.
+
+    A payload (tools/dev/build_desktop_payload.py) puts payload.json at the
+    prefix root, beside python/. The interpreter is python/python.exe or
+    python/bin/python3, so the prefix is one or two levels above its directory.
+    """
+    exe = Path(executable or sys.executable)
+    for parent in list(exe.parents)[:3]:
+        if (parent / "payload.json").is_file():
+            return parent
+    return None
+
+
+def find_payload_jre(executable: Optional[str] = None) -> Optional[str]:
+    """The JRE a desktop payload ships at <prefix>/jre/.
+
+    It sits outside site-packages, so `ciris-agent upgrade` never removes it.
+    Machines with no Java 17 rely on it (2.24.0; the old frozen installer
+    bundled one the same way).
+    """
+    prefix = payload_prefix(executable)
+    if prefix is None:
+        return None
+    jre_root = prefix / "jre"
+    java = jre_root / "bin" / _java_exe_name()
+    if java.exists():
+        _ensure_bundled_jre_executable(jre_root)
+        return str(java)
+    return None
+
+
 def find_java() -> Optional[str]:
     """Find Java executable.
 
     Preference order:
       1. Bundled JRE shipped in the wheel (standalone install).
-      2. JAVA_HOME.
-      3. ``java`` on PATH.
+      2. The desktop payload's JRE (<prefix>/jre).
+      3. JAVA_HOME.
+      4. ``java`` on PATH.
     """
-    bundled = find_bundled_jre()
+    bundled = find_bundled_jre() or find_payload_jre()
     if bundled:
         return bundled
 

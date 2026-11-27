@@ -8,6 +8,7 @@ Archive ``ciris-payload-<version>-<target>.tar.zst`` unpacks straight into the
 prefix (no top-level directory):
 
     python/          python-build-standalone install_only, pinned in installers/payload/python.json
+    jre/             desktop targets only: Java 17 jlinked from a JDK (--jdk / JAVA_HOME)
     payload.lock     every dependency with its sha256s (uv pip compile --generate-hashes)
     payload.json     versions, and argv relative to the prefix
 
@@ -70,6 +71,7 @@ def payload_manifest(
     wheel: Path,
     wheel_sha256: str,
     commit: str,
+    jre: bool = False,
 ) -> Dict[str, Any]:
     """What payload.json says. Paths are relative to the prefix holding payload.json."""
     interp = str(pin["interpreter"])
@@ -81,6 +83,7 @@ def payload_manifest(
         "client_version": versions["ciris-client"],
         "python_version": pins["python_version"],
         "desktop": bool(pin["desktop"]),
+        "jre": "jre" if jre else None,
         "interpreter": interp,
         "launch_argv": [interp, "-m", "ciris_engine.cli"],
         "upgrade_argv": [interp, "-m", "ciris_engine.cli", "upgrade"],
@@ -155,6 +158,14 @@ def install_user_site_guard(site_packages: Path) -> Path:
     return guard
 
 
+def jlink(jdk: Path, modules: List[str], dest: Path) -> None:
+    """A trimmed Java runtime for the desktop JAR, at dest (the prefix's jre/)."""
+    exe = jdk / "bin" / ("jlink.exe" if sys.platform == "win32" else "jlink")
+    if not exe.is_file():
+        raise SystemExit(f"no jlink at {exe}: a desktop payload needs a JDK 17 (--jdk or JAVA_HOME)")
+    _run([str(exe), "--add-modules", ",".join(modules), "--output", str(dest), "--strip-debug", "--no-man-pages", "--no-header-files", "--compress=2"])
+
+
 def _versions(python: Path, isolated: bool = False) -> Dict[str, Optional[str]]:
     code = (
         "import json; from importlib import metadata as m\n"
@@ -168,7 +179,7 @@ def _versions(python: Path, isolated: bool = False) -> Dict[str, Optional[str]]:
     return out
 
 
-def stage(target: str, wheel: Path, out: Path, requirements: Path) -> Path:
+def stage(target: str, wheel: Path, out: Path, requirements: Path, jdk: Optional[Path] = None) -> Path:
     pins = load_pins()
     if target not in pins["targets"]:
         raise SystemExit(f"unknown target {target!r}; known: {sorted(pins['targets'])}")
@@ -209,6 +220,12 @@ def stage(target: str, wheel: Path, out: Path, requirements: Path) -> Path:
     _run([str(python), "-I", "-m", "pip", "install", "--no-deps", "--no-index", "--no-warn-script-location", str(wheel)])
     _run([str(python), "-I", "-m", "pip", "check"])
 
+    if pin["desktop"]:
+        jdk = jdk or (Path(os.environ["JAVA_HOME"]) if os.environ.get("JAVA_HOME") else None)
+        if jdk is None:
+            raise SystemExit(f"{target} is a desktop target and needs a JDK for its jre/ (--jdk or JAVA_HOME)")
+        jlink(jdk, list(pins["jre_modules"]), prefix / "jre")
+
     versions = _versions(python, isolated=True)
     if not all(versions.values()):
         raise SystemExit(f"payload is missing a CIRIS distribution: {versions}")
@@ -220,6 +237,7 @@ def stage(target: str, wheel: Path, out: Path, requirements: Path) -> Path:
         wheel=wheel,
         wheel_sha256=sha256_of(wheel),
         commit=os.environ.get("GITHUB_SHA", "local"),
+        jre=bool(pin["desktop"]),
     )
     (prefix / "payload.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
@@ -263,6 +281,12 @@ def smoke(archive: Path) -> None:
     _run([str(python), "-c", probe], env=env)
     upgrade = [str(dest / manifest["upgrade_argv"][0]), *manifest["upgrade_argv"][1:], "--help"]
     _run(upgrade, env=env)
+    if manifest["jre"]:
+        java = dest / manifest["jre"] / "bin" / ("java.exe" if sys.platform == "win32" else "java")
+        _run([str(java), "-version"], env=env)
+        # The launcher must pick the payload's own JRE, not the runner's Java.
+        code = "import sys; from ciris_engine.desktop_launcher import find_java; j = find_java(); print(j); assert j and j.startswith(sys.argv[1]), j"
+        _run([str(python), "-c", code, str(dest / manifest["jre"])], env=env)
     if manifest["desktop"]:
         code = "import ciris_engine, pathlib; p = pathlib.Path(ciris_engine.__file__).parent / 'desktop_app'; jars = sorted(p.glob('CIRIS-*.jar')); print(jars); assert jars"
         _run([str(python), "-c", code], env=env)
@@ -277,11 +301,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("--wheel", required=True, type=Path)
     s.add_argument("--out", required=True, type=Path)
     s.add_argument("--requirements", type=Path, default=ROOT / "requirements.txt")
+    s.add_argument("--jdk", type=Path, help="JDK whose jlink builds jre/ (default: JAVA_HOME)")
     k = sub.add_parser("smoke")
     k.add_argument("archive", type=Path)
     args = ap.parse_args(argv)
     if args.cmd == "stage":
-        stage(args.target, args.wheel, args.out, args.requirements)
+        stage(args.target, args.wheel, args.out, args.requirements, args.jdk)
     else:
         smoke(args.archive)
     return 0

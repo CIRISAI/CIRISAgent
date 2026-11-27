@@ -39,5 +39,20 @@
       "client_platform": null,
       "desktop": false
     }
-  }
+  },
+  "jre_modules": [
+    "java.base",
+    "java.desktop",
+    "java.management",
+    "java.logging",
+    "java.naming",
+    "java.net.http",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.crypto.ec",
+    "jdk.localedata",
+    "jdk.unsupported",
+    "jdk.zipfs"
+  ],
+  "_jre_comment": "Desktop targets jlink these modules from a JDK 17 (CI: Liberica, which still runs on Windows 7) into <prefix>/jre. Same list as installers/windows/bundle-jre.ps1."
 }

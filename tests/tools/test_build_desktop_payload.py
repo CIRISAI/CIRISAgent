@@ -55,6 +55,7 @@ def _manifest(target: str) -> dict:
         wheel=Path("ciris_agent-2.24.0-py3-none-win_amd64.whl"),
         wheel_sha256="a" * 64,
         commit="abc",
+        jre=pins["targets"][target]["desktop"],
     )
 
 
@@ -69,6 +70,20 @@ def test_payload_json_argv_is_relative_and_module_form(target: str) -> None:
     assert m["console_scripts_relocatable"] is False
     assert m["signed"] is False  # Eric 2026-11-27: unsigned for testing
     assert m["desktop"] is (target != "linux-aarch64")
+    # A desktop payload carries its own Java at <prefix>/jre; the launcher looks there.
+    assert m["jre"] == ("jre" if m["desktop"] else None)
+
+
+def test_the_jre_modules_match_the_old_windows_installer() -> None:
+    """One module list for the desktop JAR, whichever installer bundles the JRE."""
+    ps1 = (ROOT / "installers" / "windows" / "bundle-jre.ps1").read_text(encoding="utf-8")
+    block = ps1[ps1.index("$modules = @(") : ps1.index(") -join")]
+    assert re.findall(r'"([a-z.]+)"', block) == bdp.load_pins()["jre_modules"]
+
+
+def test_a_desktop_target_without_a_jdk_stops_the_build(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="jlink"):
+        bdp.jlink(tmp_path / "no-jdk", ["java.base"], tmp_path / "jre")
 
 
 def test_the_upgrade_argv_matches_what_the_agent_reports() -> None:

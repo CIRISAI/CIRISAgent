@@ -1152,6 +1152,14 @@ jobs:
         shell: bash
         run: python -m pip install --upgrade pip build wheel uv==0.13.8 zstandard==0.25.0
 
+      - name: Set up a JDK 17 for the payload's jre/ (desktop targets)
+        # Liberica, as for the old Windows installer: Temurin 17 dropped Windows 7.
+        if: matrix.target != 'linux-aarch64'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: '17'
+
       - name: Vendor this target's desktop JAR from the client wheel
         shell: bash
         run: |

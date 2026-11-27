@@ -459,3 +459,72 @@ def test_the_anchor_rules_reach_all_three_system_prompts(tmp_path: Path) -> None
         assert "THESE STRINGS ARE NOT UI LABELS" in text
         assert 'Keys starting "website:", "client:" or "agent-ui:"' in text
     assert "not a terminology finding" in L.SYSTEM_REVIEW
+
+
+# ──────────────────────────────────────────────
+# Re-split: a header and its tail, redone together (--resplit)
+# ──────────────────────────────────────────────
+
+
+@pytest.fixture
+def resplit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(PL, "RESPLIT", frozenset({"coh_conscience.system_prompt"}))
+
+
+def _conscience_stage(tmp_path: Path, values: Dict[str, str]) -> Path:
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "es.json").write_text(json.dumps({"coh_conscience": values}, ensure_ascii=False), encoding="utf-8")
+    return stage
+
+
+def test_a_resplit_stages_header_and_tail_as_missing(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    assert {"system_prompt", "system_prompt_tail"} <= set(en["coh_conscience"])
+    es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
+    # The pre-split header is redone from the split English, so it is not offered as "have".
+    assert "system_prompt" not in es.get("coh_conscience", {})
+
+
+def test_without_a_resplit_the_tail_stays_pending(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    assert "system_prompt_tail" not in en["coh_conscience"]
+
+
+def test_a_resplit_pair_is_written_together_and_the_loader_renders_it_once(
+    two_roots: list, tmp_path: Path, resplit: None
+) -> None:
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    head = "Eres IRIS-C. Puntúa la coherencia."
+    tail = 'Responde con JSON: {"coherence": <0.0-1.0>}\n'
+    written, rejected = PL.write_back(
+        _conscience_stage(tmp_path, {"system_prompt": head, "system_prompt_tail": tail}), ["es"], two_roots
+    )
+    assert rejected == {}
+    assert {"es:coh_conscience.system_prompt", "es:coh_conscience.system_prompt_tail"} <= set(written)
+    loader = ConsciencePromptLoader(prompts_dir=str(two_roots[1]), language="es")
+    got_head, _, got_tail = loader.get_system_prompt_parts("coh_conscience")
+    assert got_head == head and got_tail == tail
+    assert (got_head + got_tail).count("Responde con JSON") == 1
+
+
+def test_half_a_resplit_pair_writes_nothing(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    """Negative: a header translated without its tail would drop the tail's text."""
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+    written, rejected = PL.write_back(_conscience_stage(tmp_path, {"system_prompt": "Eres IRIS-C."}), ["es"], two_roots)
+    assert written == [] and "written together or not at all" in rejected["es:coh_conscience.system_prompt"][0]
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_a_resplit_pair_with_a_broken_tail_writes_neither(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+    written, rejected = PL.write_back(
+        _conscience_stage(tmp_path, {"system_prompt": "Eres IRIS-C.", "system_prompt_tail": "Responde con texto.\n"}),
+        ["es"],
+        two_roots,
+    )
+    assert not any(k.startswith("es:coh_conscience.system_prompt") for k in written)
+    assert rejected and path.read_text(encoding="utf-8") == before

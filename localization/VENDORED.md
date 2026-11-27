@@ -123,6 +123,7 @@ attribute that the vendored functions look up at call time.
     the locale headers are still the pre-split translation, so a tail would
     repeat their text, and a header is not written into a locale that lacks
     its tail (the translation would drop the tail's text).
+  - `--resplit template.field` (lane input `resplit`) un-pends a tail on purpose. For each named header, the header and its `_tail` are staged as missing, translated together from the current split English, and written only as a pair. If either is untranslated or rejected, neither is written. Select both fields in `keys`. First used for the three conscience prompts in 2.24.0 (#1366 item 12 and the objection-type wording).
   - Only the conscience `user_prompt_*` templates are `str.format`ted at load
     time; the `str.format` check skips the other conscience fields.
   - A value is written only if it still renders (`prompt_problems`): same

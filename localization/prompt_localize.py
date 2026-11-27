@@ -58,7 +58,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 try:  # PyYAML is not on a bare CI runner. lane_shards imports this module for
     # every target (it only needs template_names), so the import must not fail
@@ -127,6 +127,20 @@ ENGLISH_BY_DESIGN = frozenset(
 #: loader agrees: a locale file without ``system_prompt_tail`` renders it empty,
 #: and one without ``pipeline_position`` gets the English paragraph.
 SPLIT_PENDING_SUFFIX = "_tail"
+
+#: Headers being RE-SPLIT this run (``--resplit template.field``, e.g.
+#: ``entropy_conscience.system_prompt``). For each, the header and its tail are
+#: both staged as missing, translated together from the current split English,
+#: and written as a pair or not at all. That is what un-pends a tail: the locale
+#: header is replaced by a translation of the split English head, so the tail's
+#: text is in the prompt once. Set by ``main``; empty means the default rule.
+RESPLIT: FrozenSet[str] = frozenset()
+
+
+def _resplit_header(template: str, field: str) -> Optional[str]:
+    """The header ``field`` re-splits with (itself, or the field its tail belongs to), if re-split this run."""
+    header = field[: -len(SPLIT_PENDING_SUFFIX)] if field.endswith(SPLIT_PENDING_SUFFIX) else field
+    return header if f"{template}.{header}" in RESPLIT else None
 
 #: The conscience fields the loader passes through ``str.format``
 #: (``ConsciencePromptLoader.get_user_prompt``). Its system prompt, pipeline
@@ -255,7 +269,7 @@ def translatable(template: str, doc: Dict[str, Any]) -> Dict[str, str]:
         if isinstance(value, str)
         and value.strip()
         and field not in NOT_TRANSLATED
-        and not field.endswith(SPLIT_PENDING_SUFFIX)
+        and (not field.endswith(SPLIT_PENDING_SUFFIX) or _resplit_header(template, field) is not None)
         and f"{template}.{field}" not in ENGLISH_BY_DESIGN
     }
 
@@ -273,6 +287,8 @@ def locale_bundle(lang: str, en: Dict[str, Dict[str, str]], prompts: Roots = PRO
             f: doc[f]
             for f, english in fields.items()
             if isinstance(doc.get(f), str) and doc[f].strip() and doc[f] != english
+            # A re-split pair is redone from the split English: staged as missing.
+            and _resplit_header(template, f) is None
         }
         if have:
             out[template] = have
@@ -464,8 +480,29 @@ def write_back(
                 value = (staged.get(template) or {}).get(field)
                 if not isinstance(value, str) or value == current.get(field):
                     continue
+                header = _resplit_header(template, field)
+                if header is not None:
+                    # Header and tail land together or not at all.
+                    tail_field = header + SPLIT_PENDING_SUFFIX
+                    pair = {f: (staged.get(template) or {}).get(f) for f in (header, tail_field)}
+                    missing_pair = [f for f, v in pair.items() if not isinstance(v, str) or not v.strip()]
+                    if missing_pair:
+                        rejected[f"{lang}:{template}.{field}"] = [
+                            f"re-split {template}.{header}: {', '.join(missing_pair)} was not translated in this run; "
+                            "header and tail are written together or not at all"
+                        ]
+                        continue
+                    pair_problems = {
+                        f: prompt_problems(fields[f], v, formatted=is_format_string(prompts, template, f))
+                        for f, v in pair.items()
+                    }
+                    if any(pair_problems.values()):
+                        rejected[f"{lang}:{template}.{field}"] = [
+                            f"re-split {template}.{header}: {f}: {'; '.join(pr)}" for f, pr in pair_problems.items() if pr
+                        ]
+                        continue
                 tail = field + SPLIT_PENDING_SUFFIX
-                if tail in english_doc and tail not in current:
+                if header is None and tail in english_doc and tail not in current:
                     # A pre-split locale: its header still holds the tail's
                     # translation, and the loader renders a missing tail empty.
                     # A translation of the split English head would drop it.
@@ -789,7 +826,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="a ciris-website or CIRISClient checkout whose translated strings become terminology anchors "
         "(repeatable; the agent's own UI bundle is always read)",
     )
+    ap.add_argument(
+        "--resplit",
+        action="append",
+        default=[],
+        metavar="TEMPLATE.FIELD",
+        help="re-split this header with its _tail: both re-translated from the split English, written as a pair "
+        "(select both with --keys; e.g. entropy_conscience.system_prompt)",
+    )
     args, rest = ap.parse_known_args(argv)
+    global RESPLIT
+    RESPLIT = frozenset(args.resplit)
+    for key in sorted(RESPLIT):
+        template, _, field = key.partition(".")
+        english = read_template(locale_path(PROMPT_ROOTS, "en", template)) if template in templates() else {}
+        if not isinstance(english.get(field), str) or not isinstance(english.get(field + SPLIT_PENDING_SUFFIX), str):
+            print(f"[refuse] --resplit {key}: the English template has no {field} with a {field}{SPLIT_PENDING_SUFFIX}")
+            return 2
 
     if args.verify:
         blocking, standing = verify(changed_only=args.changed)

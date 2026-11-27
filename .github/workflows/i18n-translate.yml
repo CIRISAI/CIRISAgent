@@ -82,6 +82,10 @@ on:
         required: false
         default: false
         type: boolean
+      resplit:
+        description: "target=prompts: re-split these headers with their _tail, space-separated template.field (e.g. entropy_conscience.system_prompt). Header and tail are re-translated from the split English and written as a pair; put both fields in keys."
+        required: false
+        default: ""
 
 concurrency:
   # One writer at a time. Parallel agents racing on one bundle is the failure
@@ -112,4 +116,5 @@ jobs:
       mode: ${{ inputs.mode }}
       shards: ${{ inputs.shards }}
       overwrite: ${{ inputs.overwrite }}
+      resplit: ${{ inputs.resplit }}
       commit: true

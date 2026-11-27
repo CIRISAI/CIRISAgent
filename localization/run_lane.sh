@@ -24,6 +24,9 @@
 #                   (TARGET=ui or prompts; localize.py --overwrite). For a deliberate
 #                   retranslation after an English change: pair it with exact
 #                   KEYS, never a broad pattern, so hand-written overrules stay.
+#   RESPLIT         TARGET=prompts: space-separated template.field headers to re-split
+#                   with their _tail (prompt_localize.py --resplit); pair with KEYS
+#                   naming both fields.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -f  # KEYS patterns like accord.v9.* are fnmatch patterns, not shell globs
@@ -52,6 +55,7 @@ case "${TARGET:-accord}" in
     python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
     cmd=(python3 localization/prompt_localize.py)
     if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
+    for r in ${RESPLIT:-}; do cmd+=(--resplit "$r"); done
     for d in ${EXTRA_TM:-}; do cmd+=(--extra-tm "$d"); done
     ;;
   *)

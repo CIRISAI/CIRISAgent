@@ -130,6 +130,11 @@ on:
         required: false
         default: false
         type: boolean
+      resplit:
+        description: "target=prompts: headers re-split with their _tail (space-separated template.field); both re-translated from the split English and written as a pair. Select both fields in keys."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -159,6 +164,7 @@ jobs:
       LANGS: ${{ inputs.langs }}
       MAX_KEYS: ${{ inputs.max_keys }}
       OVERWRITE: ${{ inputs.overwrite }}
+      RESPLIT: ${{ inputs.resplit }}
       MODE: ${{ inputs.mode }}
       SHARDS: ${{ inputs.shards }}
     steps:
@@ -295,6 +301,7 @@ jobs:
       SHARD: ${{ matrix.shard }}
       MAX_KEYS: ${{ inputs.max_keys }}
       OVERWRITE: ${{ inputs.overwrite }}
+      RESPLIT: ${{ inputs.resplit }}
       MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@v4

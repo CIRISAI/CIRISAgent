@@ -399,3 +399,24 @@ def test_a_current_class_path_copy_is_not_rewritten(tmp_path: Path) -> None:
         with patch.object(desktop_launcher.shutil, "copyfile", side_effect=AssertionError("rewrote a current file")):
             desktop_launcher._with_class_path(installed, private)
     assert copied.stat().st_mtime_ns == before
+
+
+def test_the_jars_sha256sums_travels_with_them(tmp_path: Path) -> None:
+    site = tmp_path / "site-packages"
+    installed = site / "ciris_engine" / "desktop_app" / "CIRIS.jar"
+    entry = "../../ciris_holon/media/jars/ffmpeg.jar"
+    _jar_with_class_path(installed, [entry])
+    jars = site / "ciris_holon" / "media" / "jars"
+    jars.mkdir(parents=True)
+    (jars / "ffmpeg.jar").write_bytes(b"ffmpeg")
+    (jars / "SHA256SUMS").write_text("aaaa  ffmpeg.jar\n")
+    private = tmp_path / "home" / "runtime" / "desktop" / "CIRIS.jar"
+    private.parent.mkdir(parents=True)
+    private.write_bytes(b"jar")
+    copied = (private.parent / entry).resolve().parent / "SHA256SUMS"
+    with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=tmp_path / "home"):
+        desktop_launcher._with_class_path(installed, private)
+        assert copied.read_text() == "aaaa  ffmpeg.jar\n"
+        (jars / "SHA256SUMS").write_text("bbbb  ffmpeg.jar\n")  # same size, new content
+        desktop_launcher._with_class_path(installed, private)
+    assert copied.read_text() == "bbbb  ffmpeg.jar\n"

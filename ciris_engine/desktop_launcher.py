@@ -205,6 +205,13 @@ def _with_class_path(installed: Path, private: Path) -> Path:
             continue  # never write outside CIRIS_HOME, whatever the manifest names
         try:
             _copy_if_changed(source, target)
+            # The client's check_holon_classpath.py verifies each copied JAR against the
+            # SHA256SUMS in its directory, so the list travels with the JARs. Compared by
+            # content: an edited list can keep its size.
+            sums = source.parent / "SHA256SUMS"
+            sums_target = target.parent / "SHA256SUMS"
+            if sums.is_file() and (not sums_target.is_file() or sums_target.read_bytes() != sums.read_bytes()):
+                shutil.copyfile(sums, sums_target)
         except OSError as e:
             print(f"Could not copy {entry} beside the desktop app ({e}); calls may have no video", file=sys.stderr)
     return private

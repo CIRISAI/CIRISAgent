@@ -698,8 +698,10 @@ class _CallHttpTransport(FakeTransport):
 def _stage_with_call(**bus_kwargs):
     clock = FakeClock()
     fed = {"linux": "alice-aaaa", "android": "bob-bbbb"}
+    # Production frames carry the node key_id as publisher, distinct from owner fed_id.
+    node_keys = {"linux": "cirisagent-desktop-node-1111", "android": "cirisagent-android-node-2222"}
     net = FakeNet(clock=clock, fed=fed)
-    bus = _FakeCallBus(fed, **bus_kwargs)
+    bus = _FakeCallBus(node_keys, **bus_kwargs)
     a = xc.Node("linux", _CallHttpTransport(net, "linux"), "u", "p", call_transport=_FakeCallTransport(bus, "linux"))
     b = xc.Node(
         "android", _CallHttpTransport(net, "android"), "u", "p", call_transport=_FakeCallTransport(bus, "android")

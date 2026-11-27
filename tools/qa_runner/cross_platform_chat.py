@@ -1274,6 +1274,8 @@ class CrossChatStage:
 
             got_audio: Dict[str, int] = {a.name: 0, b.name: 0}
             got_video: Dict[str, int] = {a.name: 0, b.name: 0}
+            rx_total: Dict[str, int] = {a.name: 0, b.name: 0}
+            rx_publishers: Dict[str, set[str]] = {a.name: set(), b.name: set()}
             media_deadline = self.clock.now() + self.d.call_media_s
             last_send = -1.0
 
@@ -1306,7 +1308,12 @@ class CrossChatStage:
                         frame = decode_incoming_call_frame(msg)
                     except ValueError as exc:
                         raise self._fail(step, LAYER_CALL, f"{reader.name} received malformed frame: {exc}", trail[-8:])
-                    if sender.fed_id and frame.publisher != sender.fed_id:
+                    rx_total[reader.name] += 1
+                    if frame.publisher:
+                        rx_publishers[reader.name].add(frame.publisher)
+                    # frame.publisher is the peer's node key_id (distinct from owner fed_id);
+                    # the payload carries the sender's name + per-run cryptographic nonce.
+                    if not frame.publisher:
                         continue
                     if frame.codec_id == CALL_CODEC_AUDIO and frame.payload == audio_payloads[sender.name]:
                         got_audio[reader.name] += 1
@@ -1324,9 +1331,15 @@ class CrossChatStage:
             missing = []
             for reader, sender in ((a, b), (b, a)):
                 if got_audio[reader.name] < 1:
-                    missing.append(f"{reader.name} missing audio from {sender.name}")
+                    missing.append(
+                        f"{reader.name} missing audio from {sender.name} "
+                        f"(rx_total={rx_total[reader.name]} pubs={sorted(rx_publishers[reader.name])})"
+                    )
                 if got_video[reader.name] < 1:
-                    missing.append(f"{reader.name} missing {CALL_VIDEO_FRAME_BYTES}-byte video from {sender.name}")
+                    missing.append(
+                        f"{reader.name} missing {CALL_VIDEO_FRAME_BYTES}-byte video from {sender.name} "
+                        f"(rx_total={rx_total[reader.name]} pubs={sorted(rx_publishers[reader.name])})"
+                    )
             if missing:
                 raise self._fail(
                     step,

@@ -306,3 +306,60 @@ def test_no_heartbeat_file_means_no_report(tmp_path: Path) -> None:
         _FakeProc(42, 3), tmp_path / "none", reports.append, clock=lambda: 1e9, sleep=lambda _s: None
     )
     assert reports == []
+
+
+# --- the private JAR copy keeps its Class-Path (client 0.5.243: FFmpeg via ../../ciris_holon/...) ---
+
+
+def _jar_with_class_path(path: Path, entries: List[str]) -> None:
+    import zipfile
+
+    # Manifest lines wrap at 72 bytes with a leading space, as the JDK writes them.
+    value = "Class-Path: " + " ".join(entries)
+    lines = [value[:70]] + [" " + value[i : i + 69] for i in range(70, len(value), 69)]
+    manifest = "Manifest-Version: 1.0\r\n" + "\r\n".join(lines) + "\r\nMain-Class: ai.ciris.desktop.MainKt\r\n\r\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("META-INF/MANIFEST.MF", manifest)
+
+
+def test_class_path_entries_are_read_across_wrapped_lines(tmp_path: Path) -> None:
+    entries = [
+        "../../ciris_holon/media/jars/javacpp-1.5.11-linux-x86_64.jar",
+        "../../ciris_holon/media/jars/ffmpeg-7.1-1.5.11-linux-x86_64.jar",
+    ]
+    jar = tmp_path / "CIRIS.jar"
+    _jar_with_class_path(jar, entries)
+    assert desktop_launcher.manifest_class_path(jar) == entries
+
+
+def test_the_private_copy_brings_its_class_path_along(tmp_path: Path) -> None:
+    site = tmp_path / "site-packages"
+    installed = site / "ciris_engine" / "desktop_app" / "CIRIS-linux-x64-1.5.243.jar"
+    entry = "../../ciris_holon/media/jars/ffmpeg-7.1-1.5.11-linux-x86_64.jar"
+    _jar_with_class_path(installed, [entry, "../../ciris_holon/media/jars/missing.jar"])
+    (site / "ciris_holon" / "media" / "jars").mkdir(parents=True)
+    (site / "ciris_holon" / "media" / "jars" / "ffmpeg-7.1-1.5.11-linux-x86_64.jar").write_bytes(b"ffmpeg")
+
+    private = tmp_path / "home" / "runtime" / "desktop" / installed.name
+    private.parent.mkdir(parents=True)
+    private.write_bytes(installed.read_bytes())
+    assert desktop_launcher._with_class_path(installed, private) == private
+    # Resolved from the COPY's directory, exactly as the JVM will.
+    assert (private.parent / entry).resolve().read_bytes() == b"ffmpeg"
+    assert (tmp_path / "home" / "ciris_holon" / "media" / "jars" / "ffmpeg-7.1-1.5.11-linux-x86_64.jar").exists()
+
+
+def test_running_in_place_copies_nothing(tmp_path: Path) -> None:
+    jar = tmp_path / "CIRIS.jar"
+    _jar_with_class_path(jar, ["../x.jar"])
+    assert desktop_launcher._with_class_path(jar, jar) == jar
+    assert not (tmp_path.parent / "x.jar").exists()
+
+
+def test_the_installed_client_jar_parses_if_present() -> None:
+    jar = desktop_launcher.find_desktop_jar()
+    if jar is None:
+        pytest.skip("no desktop JAR installed here")
+    for entry in desktop_launcher.manifest_class_path(jar):
+        assert not entry.startswith("/") and not entry.startswith("file:")

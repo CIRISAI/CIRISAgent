@@ -146,20 +146,63 @@ def _run_from_private_copy(jar: Path) -> Path:
     try:
         from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-        return Path(private_jar(jar, home))
+        return _with_class_path(jar, Path(private_jar(jar, home)))
     except ImportError:
         pass  # ciris-server < 0.5.245
     dest = home / "runtime" / "desktop" / jar.name
     try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists() or dest.stat().st_size != jar.stat().st_size:
-            tmp = dest.with_suffix(f".{os.getpid()}.tmp")
-            shutil.copyfile(jar, tmp)
-            os.replace(tmp, dest)
-        return dest
+        _copy_if_changed(jar, dest)
+        return _with_class_path(jar, dest)
     except OSError as e:
         print(f"Running the desktop app in place ({e})", file=sys.stderr)
         return jar
+
+
+def _copy_if_changed(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.exists() or dest.stat().st_size != src.stat().st_size:
+        tmp = dest.with_suffix(f".{os.getpid()}.tmp")
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dest)
+
+
+def manifest_class_path(jar: Path) -> List[str]:
+    """The relative entries of a JAR's manifest ``Class-Path`` (continuation lines joined)."""
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            text = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return []
+    joined = re.sub(r"\r?\n ", "", text.replace("\r\n", "\n"))
+    for line in joined.split("\n"):
+        if line.startswith("Class-Path:"):
+            return [e for e in line[len("Class-Path:") :].split() if e and not re.match(r"^[a-z]+:", e)]
+    return []
+
+
+def _with_class_path(installed: Path, private: Path) -> Path:
+    """Put the JAR's ``Class-Path`` files beside its private copy, at the same relative paths.
+
+    The JVM resolves ``Class-Path`` against the JAR's own directory and ignores a
+    missing entry without a word. ciris-client 0.5.243 reaches FFmpeg through
+    ``../../ciris_holon/media/jars/*`` beside the installed JAR, so the private
+    copy started with no video. Copies, not references: the copy exists so the
+    running JVM holds no file in site-packages open (WinError 32).
+    """
+    if private == installed:
+        return private
+    for entry in manifest_class_path(installed):
+        source = (installed.parent / entry).resolve()
+        if not source.is_file():
+            continue
+        target = private.parent / entry
+        try:
+            _copy_if_changed(source, target)
+        except OSError as e:
+            print(f"Could not copy {entry} beside the desktop app ({e}); calls may have no video", file=sys.stderr)
+    return private
 
 
 def stop_desktop_app() -> None:

@@ -186,3 +186,63 @@ def test_the_jar_runs_from_a_copy_outside_the_install(tmp_path: Path) -> None:
         copy = desktop_launcher._run_from_private_copy(jar)
     assert copy.read_bytes() == b"jar"
     assert home in copy.parents and jar.parent not in copy.parents
+
+
+# --- the upgrade command names THIS interpreter (2026-11-27: two Pythons, one stale) ---
+
+
+def test_upgrade_argv_is_this_python_not_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "executable", "/opt/py314/bin/python3")
+    assert upgrade.upgrade_argv() == ["/opt/py314/bin/python3", "-m", "ciris_engine.cli", "upgrade"]
+
+
+def test_the_upgrade_module_path_really_runs_the_upgrade_verb() -> None:
+    # `python -m ciris_engine.cli upgrade` only works while cli.py keeps its __main__ guard.
+    assert 'if __name__ == "__main__":' in Path(cli.__file__).read_text(encoding="utf-8")
+
+
+def test_pythonw_is_swapped_for_the_console_python(tmp_path: Path) -> None:
+    (tmp_path / "python.exe").write_text("")
+    assert upgrade.console_python(str(tmp_path / "pythonw.exe")) == str(tmp_path / "python.exe")
+    # No console Python beside it: keep what we were given rather than invent a path.
+    assert upgrade.console_python(str(tmp_path / "sub" / "pythonw.exe")) == str(tmp_path / "sub" / "pythonw.exe")
+
+
+def test_the_windows_command_is_powershell_runnable() -> None:
+    exe = r"C:\Users\franc\AppData\Local\Python\pythoncore-3.14-64\python.exe"
+    assert upgrade.upgrade_command(exe, platform="win32") == f'& "{exe}" -m ciris_engine.cli upgrade'
+
+
+def test_the_posix_command_quotes_a_path_with_spaces() -> None:
+    assert upgrade.upgrade_command("/opt/my py/python3", platform="linux") == "'/opt/my py/python3' -m ciris_engine.cli upgrade"
+
+
+def test_the_helper_uses_pip_where_there_is_pip(tmp_path: Path) -> None:
+    from ciris_engine import _upgrade_helper as helper
+
+    log = str(tmp_path / "u.log")
+    argv = helper.pip_install_argv(sys.executable, "ciris-agent", log)
+    assert argv == [sys.executable, "-m", "pip", "install", "--upgrade", "ciris-agent"]
+
+
+def test_the_helper_falls_back_to_uv_without_pip(tmp_path: Path) -> None:
+    from ciris_engine import _upgrade_helper as helper
+
+    log = str(tmp_path / "u.log")
+    with patch.object(helper.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)), patch.object(
+        helper.shutil, "which", return_value="/usr/bin/uv"
+    ):
+        argv = helper.pip_install_argv("/tools/ciris-agent/bin/python", "ciris-agent", log)
+    assert argv == ["/usr/bin/uv", "pip", "install", "--python", "/tools/ciris-agent/bin/python", "--upgrade", "ciris-agent"]
+    assert "using uv" in Path(log).read_text(encoding="utf-8")
+
+
+def test_logging_setup_states_the_install(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    from ciris_engine.logic.utils import logging_config
+
+    with caplog.at_level(logging.INFO):
+        logging_config._log_install_line()
+    line = next(r.getMessage() for r in caplog.records if "[INSTALL]" in r.getMessage())
+    assert sys.version.split()[0] in line and "ciris_engine.cli upgrade" in line

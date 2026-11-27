@@ -5,6 +5,19 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.4-stable] - 2026-11-27
+
+### Added
+
+- **`/v1/system/health` reports which install answered** (`install`): the ciris-agent, ciris-server and ciris-client versions and the Python version. A signed-in caller also gets the interpreter path and the exact command that upgrades that install (`upgrade_argv`, plus `upgrade_command` as PowerShell or POSIX shell text). The path is left out for anonymous callers because it contains the OS user name. On 2026-11-27 a Windows user with Python 3.14 and 3.15 upgraded 3.15's copy with `pip install -U` while his shortcut kept starting 3.14's 2.23.1, and nothing showed it. A client can now tell "out of date" from "wrong interpreter" and offer an upgrade that can't hit the wrong Python.
+- **Boot logs one `[INSTALL]` line**: the versions, the Python path and the upgrade command, so a shared log answers "which install is this?".
+
+### Changed
+
+- **`ciris-agent upgrade` is the documented upgrade path** (README, docs/INSTALLATION.md), with `pipx`/`uv tool` as the recommended install. A bare `pip install -U` can upgrade a different Python's copy.
+- **`ciris-agent upgrade` works in `uv tool` environments**, which have no pip: the helper falls back to `uv pip install --python`.
+- **The Python install check also runs Python 3.10** (the `python_requires` floor) and checks that `python -m ciris_engine.cli upgrade` resolves to the interpreter it runs on, on Linux and Windows. It now also runs when the upgrade code changes.
+
 ## [2.23.3-stable] - 2026-11-26
 
 ### Changed

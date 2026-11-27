@@ -16,6 +16,9 @@ on:
   pull_request:
     paths:
       - 'requirements.txt'
+      - 'ciris_engine/upgrade.py'
+      - 'ciris_engine/_upgrade_helper.py'
+      - 'ciris_engine/cli.py'
       - 'setup.py'
       - 'pyproject.toml'
       - '.github/workflows/python-install-matrix.yml'
@@ -23,6 +26,9 @@ on:
     branches: [main]
     paths:
       - 'requirements.txt'
+      - 'ciris_engine/upgrade.py'
+      - 'ciris_engine/_upgrade_helper.py'
+      - 'ciris_engine/cli.py'
       - 'setup.py'
       - 'pyproject.toml'
       - '.github/workflows/python-install-matrix.yml'
@@ -42,7 +48,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest]
-        python: ['3.13', '3.14', '3.15']
+        # 3.10 is python_requires' floor; 3.13-3.15 are where new wheels lag.
+        python: ['3.10', '3.13', '3.14', '3.15']
     env:
       PYTHONUTF8: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
@@ -74,6 +81,21 @@ jobs:
 
           for name in ("ciris-agent", "openai", "instructor", "jiter"):
               print(f"{name}=={md.version(name)}")
+          EOF
+      - name: The upgrade command names this interpreter
+        shell: bash
+        run: |
+          # `ciris-agent upgrade` is the supported upgrade path; its module form is
+          # what /v1/system/health hands a client (install.upgrade_argv).
+          python -m ciris_engine.cli upgrade --help
+          python - <<'EOF'
+          import os, sys
+          from ciris_engine.upgrade import upgrade_argv, upgrade_command
+
+          argv = upgrade_argv()
+          assert os.path.samefile(argv[0], sys.executable), (argv, sys.executable)
+          assert argv[1:] == ["-m", "ciris_engine.cli", "upgrade"], argv
+          print(upgrade_command())
           EOF
       - name: Dependency tree is consistent
         shell: bash

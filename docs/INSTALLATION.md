@@ -135,11 +135,32 @@ pip install -e .
 ### Method 2: Package Installation
 
 ```bash
-# Install from PyPI (when available)
-pip install ciris-agent
+# Install from PyPI into an environment of its own (recommended)
+pipx install ciris-agent
+# or: uv tool install ciris-agent
+# or, into the current Python: pip install ciris-agent
+```
 
-# Or install from wheel file
-pip install ciris_agent-1.0.0-py3-none-any.whl
+#### Upgrading
+
+```bash
+ciris-agent upgrade              # latest
+ciris-agent upgrade --to 2.23.4  # a specific version
+```
+
+Use this instead of `pip install -U ciris-agent`. It closes a running CIRIS
+first, because on Windows pip can't replace files that are in use (WinError 32)
+and leaves a half-installed agent. It also upgrades the Python CIRIS runs from,
+not whichever `pip` is first on your PATH. On a machine with several Pythons
+those are not always the same, and a bare `pip install -U` then upgrades a copy
+you never start.
+
+If you are not sure which Python runs CIRIS, `GET /v1/system/health` (signed
+in) reports it under `install.python_executable`, and `install.upgrade_command`
+is the exact command for that install. On Windows that command looks like:
+
+```powershell
+& "C:\Users\<you>\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m ciris_engine.cli upgrade
 ```
 
 ### Method 3: Docker Installation

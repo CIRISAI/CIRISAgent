@@ -10,13 +10,16 @@ The launcher:
 3. The desktop app connects to the running CIRIS API server
 """
 
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils import win_console as _win_console
 
@@ -24,6 +27,14 @@ from ciris_engine.logic.utils import win_console as _win_console
 _desktop_proc: Optional["subprocess.Popen[bytes]"] = None
 
 _win_console.setup()
+
+logger = logging.getLogger(__name__)
+
+#: The desktop client's UI thread rewrites this every 5 s (CIRISClient PLAN-0.5.244 §2.7):
+#: one line, ``<epoch_ms> <pid>``, under ``$CIRIS_HOME/run`` (default ``~/ciris``).
+UI_HEARTBEAT_NAME = "desktop_ui.heartbeat"
+UI_STALE_SECS = 30.0
+UI_POLL_SECS = 5.0
 
 
 def _java_exe_name() -> str:
@@ -257,6 +268,63 @@ def desktop_app_env(server_url: str, base: Optional[Dict[str, str]] = None) -> D
     return env
 
 
+def ui_heartbeat_path(env: Dict[str, str]) -> Path:
+    """Where the client writes its heartbeat: the client's own home rule, from the env it runs with."""
+    home = (env.get("CIRIS_HOME") or "").strip()
+    return (Path(home) if home else Path.home() / "ciris") / "run" / UI_HEARTBEAT_NAME
+
+
+def ui_heartbeat_age(path: Path, pid: int, now_s: float) -> Optional[float]:
+    """Seconds since THIS window's UI thread last wrote, or None if there is nothing to judge.
+
+    None for: no file (a client older than 0.5.244 writes none), an unreadable or
+    malformed line, or a line from another process (a previous run's leftover).
+    """
+    try:
+        parts = path.read_text(encoding="utf-8").split()
+        epoch_ms, writer = int(parts[0]), int(parts[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    if writer != pid:
+        return None
+    return max(0.0, now_s - epoch_ms / 1000.0)
+
+
+def watch_ui_heartbeat(
+    proc: "subprocess.Popen[bytes]",
+    path: Path,
+    report: Callable[[str], None],
+    stale_secs: float = UI_STALE_SECS,
+    poll_secs: float = UI_POLL_SECS,
+    clock: Callable[[], float] = time.time,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Report once when the window stops answering and once when it recovers.
+
+    Reports only; it never ends the window. Caveat: an idle UI thread behind an
+    invisible overlay still beats (the 2026-11-27 freeze), and the client's own
+    input-swallow check covers that case.
+    """
+    stuck = False
+    while proc.poll() is None:
+        age = ui_heartbeat_age(path, proc.pid, clock())
+        if age is not None and age > stale_secs and not stuck:
+            stuck = True
+            report(
+                f"CIRIS Desktop (pid {proc.pid}) has not responded for {age:.0f} s. "
+                "If the window stays frozen, close it and start CIRIS again."
+            )
+        elif age is not None and age <= stale_secs and stuck:
+            stuck = False
+            report(f"CIRIS Desktop (pid {proc.pid}) is responding again.")
+        sleep(poll_secs)
+
+
+def _report_ui(text: str) -> None:
+    logger.warning("[DESKTOP-UI] %s", text)
+    print(text, file=sys.stderr)
+
+
 def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     """
     Launch the CIRIS Desktop application.
@@ -275,7 +343,10 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
         print("\nThe desktop app JAR was not included in this installation.", file=sys.stderr)
         print("This can happen if you installed the headless wheel.\n", file=sys.stderr)
         print("To fix, try reinstalling with the platform-specific wheel:", file=sys.stderr)
-        print("  pip install --force-reinstall ciris-agent", file=sys.stderr)
+        from ciris_engine.upgrade import console_python
+
+        # This Python's pip, never whichever pip is first on PATH.
+        print(f'  "{console_python()}" -m pip install --force-reinstall ciris-agent', file=sys.stderr)
         print("\nOr run in headless server mode:", file=sys.stderr)
         print("  ciris-agent --server", file=sys.stderr)
         return 1
@@ -303,6 +374,12 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     global _desktop_proc
     try:
         _desktop_proc = subprocess.Popen([java, "-jar", str(jar_path)], env=env)
+        threading.Thread(
+            target=watch_ui_heartbeat,
+            args=(_desktop_proc, ui_heartbeat_path(env), _report_ui),
+            name="desktop-ui-heartbeat",
+            daemon=True,
+        ).start()
         return _desktop_proc.wait()
     except KeyboardInterrupt:
         print("\nShutting down...")

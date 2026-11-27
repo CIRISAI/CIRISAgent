@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -246,3 +247,62 @@ def test_logging_setup_states_the_install(caplog: pytest.LogCaptureFixture) -> N
         logging_config._log_install_line()
     line = next(r.getMessage() for r in caplog.records if "[INSTALL]" in r.getMessage())
     assert sys.version.split()[0] in line and "ciris_engine.cli upgrade" in line
+
+
+# --- desktop UI heartbeat (CIRISClient PLAN-0.5.244 §2.7) ---
+
+
+class _FakeProc:
+    def __init__(self, pid: int, alive_polls: int) -> None:
+        self.pid, self._left = pid, alive_polls
+
+    def poll(self) -> Optional[int]:
+        self._left -= 1
+        return None if self._left >= 0 else 0
+
+
+def test_heartbeat_path_follows_the_clients_home_rule(tmp_path: Path) -> None:
+    assert desktop_launcher.ui_heartbeat_path({"CIRIS_HOME": str(tmp_path)}) == tmp_path / "run" / "desktop_ui.heartbeat"
+    assert desktop_launcher.ui_heartbeat_path({}) == Path.home() / "ciris" / "run" / "desktop_ui.heartbeat"
+
+
+def test_heartbeat_age_ignores_missing_malformed_and_foreign_lines(tmp_path: Path) -> None:
+    hb = tmp_path / "hb"
+    assert desktop_launcher.ui_heartbeat_age(hb, 42, 100.0) is None  # older client: no file
+    hb.write_text("garbage")
+    assert desktop_launcher.ui_heartbeat_age(hb, 42, 100.0) is None
+    hb.write_text("90000 7")  # a previous window's leftover
+    assert desktop_launcher.ui_heartbeat_age(hb, 42, 100.0) is None
+    hb.write_text("90000 42")
+    assert desktop_launcher.ui_heartbeat_age(hb, 42, 100.0) == pytest.approx(10.0)
+
+
+def test_a_stale_window_is_reported_once_then_its_recovery(tmp_path: Path) -> None:
+    hb = tmp_path / "hb"
+    hb.write_text("0 42")  # last beat at t=0
+    times = iter([10.0, 40.0, 50.0, 60.0])
+    reports: List[str] = []
+
+    def _sleep(_s: float) -> None:
+        # The window recovers after the third check.
+        if len(reports) == 1 and next_t[0] >= 50.0:
+            hb.write_text("59000 42")
+
+    next_t = [0.0]
+
+    def _clock() -> float:
+        next_t[0] = next(times)
+        return next_t[0]
+
+    desktop_launcher.watch_ui_heartbeat(_FakeProc(42, 4), hb, reports.append, clock=_clock, sleep=_sleep)  # type: ignore[arg-type]
+    assert len(reports) == 2
+    assert "has not responded for 40 s" in reports[0]
+    assert "responding again" in reports[1]
+
+
+def test_no_heartbeat_file_means_no_report(tmp_path: Path) -> None:
+    reports: List[str] = []
+    desktop_launcher.watch_ui_heartbeat(  # type: ignore[arg-type]
+        _FakeProc(42, 3), tmp_path / "none", reports.append, clock=lambda: 1e9, sleep=lambda _s: None
+    )
+    assert reports == []

@@ -1528,6 +1528,56 @@ async def test_a_stale_grant_is_not_inherited_by_a_new_guidance_task(wise_author
 
 
 @pytest.mark.asyncio
+async def test_the_deferred_tasks_vetoes_are_not_inherited_by_the_guidance_task(
+    wise_authority_service, time_service, temp_db
+):
+    """Eric, 2026-11-27: the WA's resolution overrules the vetoes that led to the deferral.
+
+    Carried over by the context copy, a banned DEFER left sh-un-07's guidance task
+    with no exit (RATCHET 46040465835).
+    """
+    from ciris_engine.logic.persistence.models.tasks import VETO_RECORD_CONTEXT_KEY, get_task_by_id
+
+    await wise_authority_service.start()
+    veto = {
+        "veto_id": "veto_old",
+        "action_fingerprint": "defer::abc",
+        "equivalence_key": "defer::abc",
+        "objection_type": "substantive",
+        "conscience": "entropy",
+        "reason": "no",
+        "banned": True,
+    }
+    _insert_task_via_persist(
+        task_id="task-with-vetoes",
+        channel_id="test-channel",
+        description="the user's request",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={"correlation_id": "corr-task-with-vetoes", VETO_RECORD_CONTEXT_KEY: [veto]},
+    )
+    original = get_task_by_id("task-with-vetoes", "default")
+    assert original is not None and [e.veto_id for e in original.veto_record] == ["veto_old"]  # the fixture holds
+    deferral_id = await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-with-vetoes",
+            thought_id="thought-task-with-vetoes",
+            reason="vetoed",
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={},
+        )
+    )
+    response = DeferralResponse(approved=True, reason="Approved", wa_id="wa-2025-06-24-AUTH01", signature="")
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+
+    guidance = _guidance_task_of("task-with-vetoes")
+    assert guidance.veto_record == [], "the guidance task starts with no vetoes from before the WA's resolution"
+
+
+@pytest.mark.asyncio
 async def test_the_grant_carries_the_exact_approved_text(wise_authority_service, auth_service, time_service, temp_db):
     import hashlib
 

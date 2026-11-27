@@ -165,19 +165,30 @@ async def test_every_conscience_types_its_objection(cls: type) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cls", ALL)
-@pytest.mark.parametrize("answer", [None, "nonsense", "SUBSTANTIVE"])
-async def test_unknown_or_missing_objection_type_is_substantive(cls: type, answer: Optional[str]) -> None:
+@pytest.mark.parametrize(
+    "answer, expected",
+    [
+        # Eric, 2026-11-27: a conscience that cannot say what is wrong cannot know the
+        # action was wrong, so an unreadable or missing type is JUSTIFICATION (no ban).
+        (None, ObjectionType.JUSTIFICATION),
+        ("nonsense", ObjectionType.JUSTIFICATION),
+        ("SUBSTANTIVE", ObjectionType.SUBSTANTIVE),
+    ],
+)
+async def test_unknown_or_missing_objection_type_is_justification(
+    cls: type, answer: Optional[str], expected: ObjectionType
+) -> None:
     conscience = _conscience(cls, {}, _failing(cls, answer))
     with patch("ciris_engine.logic.persistence.get_thoughts_by_task_id", return_value=[]):
         result = await conscience.check(_speak(), _cctx())
-    assert result.objection_type == ObjectionType.SUBSTANTIVE
+    assert result.objection_type == expected
 
 
 @pytest.mark.parametrize("model", [EntropyResult, CoherenceResult, OptimizationVetoResult, EpistemicHumilityResult])
 def test_each_llm_response_model_offers_the_objection_type(model: type) -> None:
     prop = model.model_json_schema()["properties"]["objection_type"]
     assert set(prop["enum"]) == {"evidence", "justification", "substantive"}
-    assert prop["default"] == "substantive"
+    assert prop["default"] == "justification"
 
 
 @pytest.mark.parametrize(

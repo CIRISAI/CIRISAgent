@@ -1399,6 +1399,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # for THIS resolution is set below only when it verified, and a
                 # tool-approval envelope only when this deferral names a tool.
                 guidance_context_dict.pop("wa_authorization", None)
+                # Nor its vetoes (Eric, 2026-11-27): the WA's resolution is the
+                # overrule the deferral asked for. Carried over, a banned DEFER left
+                # sh-un-07's guidance task with no exit (RATCHET 46040465835).
+                from ciris_engine.logic.persistence.models.tasks import VETO_RECORD_CONTEXT_KEY
+
+                guidance_context_dict.pop(VETO_RECORD_CONTEXT_KEY, None)
                 _inherited_envelope = guidance_context_dict.get("envelope")
                 if (
                     isinstance(_inherited_envelope, dict)

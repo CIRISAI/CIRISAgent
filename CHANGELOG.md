@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ciris-agent upgrade` works in `uv tool` environments**, which have no pip: the helper falls back to `uv pip install --python`.
 - **The Python install check also runs Python 3.10** (the `python_requires` floor) and checks that `python -m ciris_engine.cli upgrade` resolves to the interpreter it runs on, on Linux and Windows. It now also runs when the upgrade code changes.
 
+### Fixed
+
+- **A DEFER is never blocked** (Eric, 2026-11-27). Deferring is how a veto reaches a Wise Authority, who can always overrule it. RATCHET run 46040465835 (sh-un-07) found a guidance task pondering at depth 7 for 31 rounds (311 LLM calls, $1.34). The cause was three paths that could replace a DEFER with a PONDER after the depth limit had already let it through as an ending action:
+  - The ban never matches a DEFER: the conscience pass skips the ban check for it, and `banned_entry_for` refuses `defer:` keys.
+  - A conscience veto no longer overrides a DEFER. The consciences still review it (the 2026-05-03 check for a dodge dressed as a refusal), and their objections ride to the Wise Authority in the deferral's context as `conscience_objections`. A veto of a DEFER is not recorded as a ban.
+  - A conscience retry no longer forces a passing DEFER into PONDER.
+- **A guidance task does not inherit the deferred task's vetoes.** The Wise Authority's resolution is the overrule the deferral asked for. The context copy already dropped the old grant and envelope; it now drops the veto record too.
+- **An objection the conscience can't classify is "justification", not "substantive".** A conscience that can't say what is wrong cannot know the action was wrong, and only a substantive objection bans for good. Changed in the response schema default, the parser's fallback and the untyped-veto fold, and in the four English conscience prompts ("substantive" only when it can name what is wrong). The localized conscience prompts never asked for an objection type, so they already fall to the default.
+
 ## [2.23.3-stable] - 2026-11-26
 
 ### Changed

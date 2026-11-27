@@ -34,11 +34,12 @@ class ObjectionType(str, Enum):
 
 
 def coerce_objection_type(value: object) -> ObjectionType:
-    """The objection type a model answered, or SUBSTANTIVE (fail safe).
+    """The objection type a model answered, or JUSTIFICATION when it gave none we can read.
 
-    Never raises: an unknown or missing type must not send the gate into a
-    reask, and must never weaken a veto into something the drafter can argue
-    away. Only an exact evidence/justification answer is read as one.
+    Never raises: an unknown or missing type must not send the gate into a reask.
+    A conscience that did not say what kind of objection it has cannot know the
+    action was wrong (Eric, 2026-11-27), so it is read as an objection to the
+    stated justification, which the drafter may restate, not a substantive ban.
     """
     if isinstance(value, ObjectionType):
         return value
@@ -47,7 +48,7 @@ def coerce_objection_type(value: object) -> ObjectionType:
         for member in ObjectionType:
             if raw == member.value:
                 return member
-    return ObjectionType.SUBSTANTIVE
+    return ObjectionType.JUSTIFICATION
 
 
 class VetoObjection(BaseModel):

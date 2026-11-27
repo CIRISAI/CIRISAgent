@@ -189,8 +189,11 @@ def banned_entry_for(
     A banned evidence veto stops applying once trusted state holds evidence the
     objecting conscience did not have (a WA has since signed): the draft then
     goes back to the consciences, and the discharge is recorded there. A
-    substantive veto is never discharged by evidence.
+    substantive veto is never discharged by evidence. A DEFER is never banned
+    (Eric, 2026-11-27): the Wise Authority it reaches can always overrule a veto.
     """
+    if equivalence_key.startswith(f"{HandlerActionType.DEFER.value}:"):
+        return None  # a DEFER is never banned: it is how a veto reaches a Wise Authority
     available = set(available_evidence_ids)
     for entry in entries:
         if entry_equivalence_key(entry) != equivalence_key or not entry.banned or entry.discharged_by:

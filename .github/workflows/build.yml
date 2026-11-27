@@ -1110,6 +1110,86 @@ jobs:
           path: dist/CIRIS-Setup-*.exe
           retention-days: 30
 
+  # Desktop payload: a relocatable Python (python-build-standalone, pinned in
+  # installers/payload/python.json) with this commit's agent and the pinned
+  # server + client installed from a hash-locked payload.lock. ciris-server's
+  # per-OS shells (Inno now, dmg/deb next) unpack it into the install prefix;
+  # the agent owns this half (agreed 2026-11-27). Unsigned for now (Eric,
+  # 2026-11-27). Each leg builds its own agent wheel with its own target's
+  # desktop JAR, so macos-x86_64 does not depend on the hand-built Intel wheel.
+  # linux-aarch64 is headless: ciris-client ships no aarch64 desktop wheel.
+  build-desktop-payload:
+    name: Desktop Payload (${{ matrix.target }})
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            os: windows-latest
+          - target: macos-arm64
+            os: macos-15
+          - target: macos-x86_64
+            os: macos-15-intel
+          - target: linux-x86_64
+            os: ubuntu-latest
+          - target: linux-aarch64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        shell: bash
+        run: python -m pip install --upgrade pip build wheel uv==0.13.8 zstandard==0.25.0
+
+      - name: Vendor this target's desktop JAR from the client wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f ciris_engine/desktop_app/*.jar
+          PLATFORM=$(python -c "import json, os; print(json.load(open('installers/payload/python.json'))['targets'][os.environ['TARGET']]['client_platform'] or '')")
+          if [ -z "$PLATFORM" ]; then
+            echo "$TARGET is headless: no desktop JAR"
+            exit 0
+          fi
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps --only-binary=:all: --platform "$PLATFORM" -d "$RUNNER_TEMP/clientwheel"
+          python tools/dev/vendor_desktop_jar.py "$RUNNER_TEMP/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
+
+      - name: Build the agent wheel for this target
+        shell: bash
+        run: python -m build --wheel --outdir "$RUNNER_TEMP/agentwheel"
+
+      - name: Stage the payload
+        shell: bash
+        run: python tools/dev/build_desktop_payload.py stage --target "$TARGET" --wheel "$RUNNER_TEMP/agentwheel" --out dist-payload
+
+      - name: The payload runs from another prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for a in dist-payload/*.tar.zst; do python tools/dev/build_desktop_payload.py smoke "$a"; done
+          cat dist-payload/*.payload.json
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: desktop-payload-${{ matrix.target }}
+          path: dist-payload/*
+          retention-days: 30
+
   # Headless wheel (no desktop JAR) for server-only deployments.
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:
@@ -1951,3 +2031,30 @@ jobs:
             dist-windows/CIRIS-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Attaches whichever desktop payloads built to the release android-release
+  # created. One leg failing (macOS Intel runner capacity, say) must not hold
+  # back the others, hence always() plus explicit results for the gates.
+  publish-desktop-payload:
+    name: Attach Desktop Payloads to the Release
+    needs: [release-gate, android-release, build-desktop-payload]
+    if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent' && needs.release-gate.result == 'success' && needs.android-release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download payload artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: desktop-payload-*
+          path: dist-payload/
+          merge-multiple: true
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -lh dist-payload/
+          gh release upload "$GITHUB_REF_NAME" dist-payload/* --clobber -R "$GITHUB_REPOSITORY"

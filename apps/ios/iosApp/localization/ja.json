@@ -4069,7 +4069,50 @@
     "wa_identity_profile_mismatch": "このエージェントのアイデンティティは承認済みのテンプレートと一致していません。それが解決するまで、アイデンティティの変更は適用されません。",
     "wa_identity_profile_contested": "このエージェントのアイデンティティは争われています。それが解決するまで、アイデンティティの変更は適用されません。",
     "wa_identity_profile_unknown": "このエージェントは、このアプリが認識していないアイデンティティの状態を報告しました。",
-    "wa_identity_open_base_link": "ベースリンクリクエストを開く"
+    "wa_identity_open_base_link": "ベースリンクリクエストを開く",
+    "call_you": "あなた",
+    "call_connecting": "接続中…あなたの映像と音声は、通話が他の参加者に届き次第開始されます。",
+    "call_not_reached": "この通話は相手に届いていません。相手のデバイスがオフラインの可能性があります。通話を終了して、後でもう一度お試しください。",
+    "call_path_unnamed": "このルームにいる誰か",
+    "call_path_both_nats_random": "あなたのネットワークと{person}のネットワークは、直接接続できません。",
+    "call_path_punch_no_answer": "{person}に直接接続できませんでした: 接続の試行に応答がありませんでした。",
+    "call_path_punch_one_way": "{person}に直接接続できませんでした: 接続は一方向のみで機能しました。",
+    "call_path_nat_undetermined": "{person}に直接接続できず、お使いのネットワークの種類も完全には特定できませんでした。",
+    "call_path_no_facilitator": "{person}に直接接続できませんでした: 接続の確立を助けるサーバーが利用できませんでした。",
+    "call_path_refused_by_peer_policy": "{person}のノードは直接接続を受け付けていません。",
+    "call_path_peer_unsupported": "{person}への直接接続はできません: 相手のアプリがこれに対応していません。",
+    "call_path_budget_refused": "接続の試行回数が多すぎます。{seconds}秒後に再試行してください。",
+    "call_path_budget_refused_shortly": "接続の試行回数が多すぎます。しばらくしてから再試行してください。",
+    "call_path_not_trusted": "追加の接続方法は信頼する相手にのみ使用されるため、{person}に対しては試されませんでした。",
+    "call_path_other": "{person}に接続できませんでした。",
+    "call_relay_refused_by_policy": "通話はCIRISパブリックサーバー経由では中継されません。",
+    "call_relay_none_available": "現在、利用可能なリレーがありません。",
+    "call_path_networks": "あなたのネットワーク: {nat}。{person}のネットワーク（相手の報告による）: {peer_nat}。",
+    "call_path_networks_peer_unknown": "あなたのネットワーク: {nat}。{person}のネットワークの種類は不明です。",
+    "call_nat_open": "オープン（NATなし）",
+    "call_nat_full_cone": "フルコーンNAT",
+    "call_nat_restricted": "制限NAT",
+    "call_nat_port_restricted": "ポート制限NAT",
+    "call_nat_symmetric": "シンメトリックNAT",
+    "call_nat_unknown": "不明",
+    "call_path_port_open": "お使いのルーターでポートが開いています（UPnP/NAT-PMP/PCP）。",
+    "call_path_action_local": "お使いのネットワークは直接通話をブロックしています。別のネットワークをお試しください。例えば、モバイルデータの代わりにWi-Fiを使用してください。",
+    "call_path_action_peer": "{person}のネットワークは直接通話をブロックしています。",
+    "call_path_try_again": "再試行",
+    "call_path_details": "詳細",
+    "call_path_details_hide": "詳細を隠す",
+    "call_path_restored": "{person}に直接接続しました。",
+    "call_path_restored_lan": "ローカルネットワーク経由で{person}に直接接続しました。",
+    "call_path_no_member_could_relay": "{person}に直接接続できず、通話中の他の誰も接続を中継できませんでした。",
+    "call_path_anonymous_no_direct": "このデバイスは匿名モードであり、直接接続することはないため、{person}に直接接続できません。",
+    "call_path_restored_relay": "{relayer}経由で{person}に接続しました。",
+    "call_path_relayer_unnamed": "他のメンバー",
+    "call_relay_switch": "このデバイスを経由して、通話中の他の人の接続を助ける",
+    "call_relay_metered_note": "モバイルデータ通信時はオンにしない限りオフになります：通話の中継はデータ通信量とバッテリーを消費します。",
+    "call_relaying_for": "このデバイスを経由して接続している人数：{count}",
+    "call_relay_switch_node": "通話を実行するノードを経由して、通話中の他の人の接続を助ける",
+    "call_full_no_count": "この通話はすでに、通話が持てる最大人数に達しています。",
+    "call_relaying_for_node": "通話を実行するノードを経由して接続している人数：{count}"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "付与済み",
       "revoked": "取り消し済み",
       "expired": "期限切れ"
+    },
+    "custody_kind": {
+      "label": "コピーを保持",
+      "gloss": "ノードが、ハッシュによって特定されるファイルのバイト列を保持していると述べているものです。"
+    },
+    "delivery_ack_stream_id": {
+      "label": "受領記録",
+      "gloss": "何かが配送されたことを示すレコードです。受領記録を取り消しても、配送そのものが取り消されるわけではありません。"
+    },
+    "file_version": {
+      "label": "ファイル",
+      "gloss": "グループが閲覧できる場所に配置されたファイルで、そのバイト列はハッシュによって特定されます。"
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "ビデオと画面共有は、現在のところ2人の間の通話でのみ利用できます。この通話には2人より多くの参加者がいるため、音声のみになります。カメラがオンになっている場合、通話が2人に戻ると再び送信が開始されます。",
     "relay_canonical_audio_only": "相手の映像は現在あなたに届きません：あなたと相手の間の経路は音声のみを伝えています。相手の声は引き続き聞くことができます。",
     "share_already_live": "すでに画面を共有しています。",
-    "no_share": "画面を共有していません。"
+    "no_share": "画面を共有していません。",
+    "full": "この通話にはすでに4人が参加しており、これは通話が持てる最大人数です。",
+    "shaped_only": "このデバイスが「話すときは常に非表示にする」に設定されている間は、通話をご利用いただけません。",
+    "relay_unavailable": "他の人のために通話を中継することは、このノードではまだ利用できません。",
+    "end": {
+      "hung_up": "通話から退出しました。",
+      "revoked": "このルームのメンバーではなくなったため、通話は終了しました。",
+      "expired": "この通話のルームの有効期限が切れたため、通話は終了しました。"
+    },
+    "media_path_failed": {
+      "both_nats_random": "両方のネットワークがポートをランダムに割り当てるため、直接接続を確立できません。",
+      "punch_no_answer": "直接接続を試みましたが、応答がありませんでした。",
+      "punch_one_way": "直接接続は一方向のみ確立されました。",
+      "nat_undetermined": "どちらのネットワークも測定される前に、接続の試行が終了しました。",
+      "no_facilitator": "このデバイスには直接接続のための仲介点がないか、応答がありませんでした。",
+      "refused_by_peer_policy": "相手のデバイスは、このデバイスからの直接接続を受け付けません。",
+      "peer_unsupported": "相手のデバイスは直接接続を確立できません。",
+      "budget_refused": "これらのネットワークに必要なより高度な接続手法は、現在のところ利用が制限されています。しばらくしてから再試行してください。",
+      "not_trusted": "このデバイスは、その相手のデバイスとアドレスを共有していません。",
+      "no_member_could_relay": "直接接続はできず、通話中の他の誰もそれを中継できませんでした。",
+      "anonymous_no_direct": "このデバイスは匿名であり、匿名のデバイスは直接接続することはありません。",
+      "other": "接続を確立できませんでした。"
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "通話中の他の人がそれを中継しています。",
+      "none_available": "通話中の誰も中継を申し出ませんでした。",
+      "refused_by_policy": "それを中継できるのはCIRISパブリックサーバーだけですが、CIRISパブリックサーバーは通話を中継しません。"
+    }
   },
   "decisions": {
     "not_found": "その決定は、もうあなたに対して開かれていません。",

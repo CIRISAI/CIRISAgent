@@ -4236,7 +4236,50 @@
     "wa_identity_profile_mismatch": "Identitas agen ini tidak cocok dengan template yang telah disetujui. Tidak ada perubahan identitas yang berlaku sampai hal ini diselesaikan.",
     "wa_identity_profile_contested": "Identitas agen ini sedang disengketakan. Tidak ada perubahan identitas yang berlaku sampai hal ini diselesaikan.",
     "wa_identity_profile_unknown": "Agen ini melaporkan status identitas yang tidak dikenali oleh aplikasi ini.",
-    "wa_identity_open_base_link": "Buka permintaan tautan dasar"
+    "wa_identity_open_base_link": "Buka permintaan tautan dasar",
+    "call_you": "Anda",
+    "call_connecting": "Menghubungkan… Gambar dan suara Anda akan mulai setelah panggilan mencapai orang lain.",
+    "call_not_reached": "Panggilan ini belum sampai ke siapa pun. Perangkat orang lain mungkin sedang offline. Anda dapat keluar dan mencoba lagi nanti.",
+    "call_path_unnamed": "seseorang di ruang ini",
+    "call_path_both_nats_random": "Jaringan Anda dan jaringan {person} tidak dapat terhubung satu sama lain secara langsung.",
+    "call_path_punch_no_answer": "Tidak dapat menghubungi {person} secara langsung: upaya koneksi tidak mendapat jawaban.",
+    "call_path_punch_one_way": "Tidak dapat menghubungi {person} secara langsung: koneksi hanya berfungsi dalam satu arah.",
+    "call_path_nat_undetermined": "Tidak dapat menghubungi {person} secara langsung, dan jenis jaringan Anda tidak dapat ditentukan sepenuhnya.",
+    "call_path_no_facilitator": "Tidak dapat menghubungi {person} secara langsung: tidak ada server yang tersedia untuk membantu menyiapkan koneksi.",
+    "call_path_refused_by_peer_policy": "Koneksi langsung tidak diterima oleh node {person}.",
+    "call_path_peer_unsupported": "Koneksi langsung ke {person} tidak memungkinkan: aplikasi mereka tidak mendukungnya.",
+    "call_path_budget_refused": "Terlalu banyak upaya koneksi baru-baru ini. Coba lagi dalam {seconds} dtk.",
+    "call_path_budget_refused_shortly": "Terlalu banyak upaya koneksi baru-baru ini. Coba lagi sebentar lagi.",
+    "call_path_not_trusted": "Metode koneksi tambahan hanya digunakan dengan orang yang Anda percayai, jadi metode tersebut tidak dicoba untuk {person}.",
+    "call_path_other": "Tidak dapat terhubung ke {person}.",
+    "call_relay_refused_by_policy": "Panggilan tidak diteruskan melalui server publik CIRIS.",
+    "call_relay_none_available": "Tidak ada relay yang tersedia saat ini.",
+    "call_path_networks": "Jaringan Anda: {nat}. Jaringan {person} (menurut laporan mereka): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Jaringan Anda: {nat}. Jenis jaringan {person} tidak diketahui.",
+    "call_nat_open": "terbuka (tanpa NAT)",
+    "call_nat_full_cone": "NAT full-cone",
+    "call_nat_restricted": "NAT restricted",
+    "call_nat_port_restricted": "NAT port-restricted",
+    "call_nat_symmetric": "NAT symmetric",
+    "call_nat_unknown": "tidak diketahui",
+    "call_path_port_open": "Sebuah port terbuka pada router Anda (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Jaringan Anda memblokir panggilan langsung. Coba jaringan lain, misalnya Wi-Fi, bukan data seluler.",
+    "call_path_action_peer": "Jaringan {person} memblokir panggilan langsung.",
+    "call_path_try_again": "Coba lagi",
+    "call_path_details": "Detail",
+    "call_path_details_hide": "Sembunyikan detail",
+    "call_path_restored": "Terhubung ke {person} secara langsung.",
+    "call_path_restored_lan": "Terhubung ke {person} secara langsung, melalui jaringan lokal Anda.",
+    "call_path_no_member_could_relay": "Tidak dapat menghubungi {person} secara langsung, dan tidak ada orang lain dalam panggilan yang dapat meneruskan koneksinya.",
+    "call_path_anonymous_no_direct": "Perangkat ini dalam mode anonim, yang tidak pernah terhubung secara langsung, sehingga tidak dapat menghubungi {person} secara langsung.",
+    "call_path_restored_relay": "Terhubung ke {person} melalui {relayer}.",
+    "call_path_relayer_unnamed": "anggota lain",
+    "call_relay_switch": "Bantu orang lain dalam panggilan ini terhubung melalui perangkat ini",
+    "call_relay_metered_note": "Nonaktif pada data seluler kecuali Anda mengaktifkannya: meneruskan panggilan menggunakan data dan baterai Anda.",
+    "call_relaying_for": "Orang yang terhubung melalui perangkat ini: {count}",
+    "call_relay_switch_node": "Bantu orang lain dalam panggilan ini terhubung melalui node yang menjalankan panggilan ini",
+    "call_full_no_count": "Panggilan ini sudah memiliki jumlah orang maksimal yang dapat dimiliki sebuah panggilan.",
+    "call_relaying_for_node": "Orang yang terhubung melalui node yang menjalankan panggilan: {count}"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -6280,6 +6323,18 @@
       "granted": "Diberikan",
       "revoked": "Dicabut",
       "expired": "Kedaluwarsa"
+    },
+    "custody_kind": {
+      "label": "Memegang salinan",
+      "gloss": "Sebuah node yang menyatakan memegang byte untuk suatu berkas, yang dikenali melalui hash-nya."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Tanda terima",
+      "gloss": "Catatan bahwa sesuatu telah dikirimkan. Membatalkan tanda terima tidak membatalkan pengiriman itu."
+    },
+    "file_version": {
+      "label": "Berkas",
+      "gloss": "Sebuah berkas yang ditempatkan di tempat yang dapat dilihat oleh suatu grup, byte-nya dikenali melalui hash-nya."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Video dan berbagi layar untuk saat ini hanya berfungsi dalam panggilan antara dua orang. Panggilan ini memiliki lebih dari itu, sehingga hanya suara. Jika kamera Anda aktif, pengiriman video akan dimulai lagi saat panggilan kembali menjadi dua orang.",
     "relay_canonical_audio_only": "Video mereka tidak dapat menjangkau Anda saat ini: jalur antara Anda dan mereka hanya membawa suara. Anda tetap dapat mendengar mereka.",
     "share_already_live": "Anda sudah membagikan layar Anda.",
-    "no_share": "Anda tidak sedang membagikan layar Anda."
+    "no_share": "Anda tidak sedang membagikan layar Anda.",
+    "full": "Panggilan ini sudah memiliki 4 orang, jumlah maksimal yang dapat dimiliki sebuah panggilan.",
+    "shaped_only": "Panggilan tidak tersedia selama perangkat ini diatur ke \"Selalu sembunyikan saat saya berbicara\".",
+    "relay_unavailable": "Meneruskan panggilan untuk orang lain belum tersedia di node ini.",
+    "end": {
+      "hung_up": "Anda meninggalkan panggilan.",
+      "revoked": "Anda tidak lagi menjadi anggota ruang ini, sehingga panggilan diakhiri.",
+      "expired": "Ruang panggilan ini sudah kedaluwarsa, sehingga panggilan diakhiri."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Kedua jaringan menetapkan port secara acak, sehingga koneksi langsung tidak dapat dibuat.",
+      "punch_no_answer": "Koneksi langsung sudah dicoba, tetapi tidak ada respons.",
+      "punch_one_way": "Koneksi langsung hanya berhasil dalam satu arah.",
+      "nat_undetermined": "Upaya koneksi berakhir sebelum salah satu jaringan sempat diukur.",
+      "no_facilitator": "Perangkat ini tidak memiliki titik temu untuk koneksi langsung, atau tidak merespons.",
+      "refused_by_peer_policy": "Perangkat mereka tidak menerima koneksi langsung dari perangkat ini.",
+      "peer_unsupported": "Perangkat mereka tidak dapat membuat koneksi langsung.",
+      "budget_refused": "Teknik koneksi yang lebih rumit yang dibutuhkan jaringan ini untuk sementara ditahan. Coba lagi sebentar lagi.",
+      "not_trusted": "Perangkat ini tidak membagikan alamatnya dengan perangkat orang tersebut.",
+      "no_member_could_relay": "Tidak ada koneksi langsung, dan tidak ada orang lain dalam panggilan yang dapat meneruskannya.",
+      "anonymous_no_direct": "Perangkat ini anonim, dan perangkat anonim tidak pernah terhubung secara langsung.",
+      "other": "Koneksi tidak dapat dibuat."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Orang lain dalam panggilan sedang meneruskannya.",
+      "none_available": "Tidak ada orang dalam panggilan yang menawarkan untuk meneruskannya.",
+      "refused_by_policy": "Hanya server publik CIRIS yang dapat meneruskannya, dan server publik CIRIS tidak pernah meneruskan panggilan."
+    }
   },
   "decisions": {
     "not_found": "Keputusan itu tidak lagi terbuka untuk Anda.",

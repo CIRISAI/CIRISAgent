@@ -4069,7 +4069,50 @@
     "invites_notice_seated": "Cette personne a rejoint la pièce.",
     "invites_notice_seat_awaiting": "Votre approbation est enregistrée. Les autres membres doivent encore donner leur approbation.",
     "accord_kind_confirmed": "ARRÊT CONFIRMÉ — CONFIRME L'ARRÊT EN VIGUEUR",
-    "accord_binding_confirmed": "confirmé · une majorité stricte des détenteurs confirme l'arrêt nommé déjà en vigueur. Il ne s'agit ni d'un nouvel arrêt ni d'un avis."
+    "accord_binding_confirmed": "confirmé · une majorité stricte des détenteurs confirme l'arrêt nommé déjà en vigueur. Il ne s'agit ni d'un nouvel arrêt ni d'un avis.",
+    "call_you": "Vous",
+    "call_connecting": "Connexion en cours… Votre image et votre son démarrent dès que l'appel atteint les autres participants.",
+    "call_not_reached": "Cet appel n'a atteint personne. L'appareil de l'autre personne est peut-être hors ligne. Vous pouvez quitter et réessayer plus tard.",
+    "call_path_unnamed": "quelqu'un dans cette salle",
+    "call_path_both_nats_random": "Votre réseau et le réseau de {person} ne peuvent pas se connecter l'un à l'autre directement.",
+    "call_path_punch_no_answer": "Impossible de joindre {person} directement : la tentative de connexion est restée sans réponse.",
+    "call_path_punch_one_way": "Impossible de joindre {person} directement : la connexion n'a fonctionné que dans un seul sens.",
+    "call_path_nat_undetermined": "Impossible de joindre {person} directement, et votre type de réseau n'a pas pu être entièrement déterminé.",
+    "call_path_no_facilitator": "Impossible de joindre {person} directement : aucun serveur n'était disponible pour faciliter l'établissement de la connexion.",
+    "call_path_refused_by_peer_policy": "Les connexions directes ne sont pas acceptées par le nœud de {person}.",
+    "call_path_peer_unsupported": "Une connexion directe à {person} n'est pas possible : son application ne le prend pas en charge.",
+    "call_path_budget_refused": "Trop de tentatives de connexion à l'instant. Réessayez dans {seconds} s.",
+    "call_path_budget_refused_shortly": "Trop de tentatives de connexion à l'instant. Réessayez dans un instant.",
+    "call_path_not_trusted": "Les méthodes de connexion supplémentaires ne sont utilisées qu'avec les personnes de confiance, elles n'ont donc pas été tentées pour {person}.",
+    "call_path_other": "Impossible de se connecter à {person}.",
+    "call_relay_refused_by_policy": "Les appels ne sont pas relayés via les serveurs publics CIRIS.",
+    "call_relay_none_available": "Aucun relais n'est disponible pour le moment.",
+    "call_path_networks": "Votre réseau : {nat}. Le réseau de {person} (d'après ses propres informations) : {peer_nat}.",
+    "call_path_networks_peer_unknown": "Votre réseau : {nat}. Le type de réseau de {person} n'est pas connu.",
+    "call_nat_open": "ouvert (sans NAT)",
+    "call_nat_full_cone": "NAT à cône complet",
+    "call_nat_restricted": "NAT restreint",
+    "call_nat_port_restricted": "NAT à restriction de port",
+    "call_nat_symmetric": "NAT symétrique",
+    "call_nat_unknown": "inconnu",
+    "call_path_port_open": "Un port est ouvert sur votre routeur (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Votre réseau bloque les appels directs. Essayez un autre réseau, par exemple le Wi-Fi plutôt que les données mobiles.",
+    "call_path_action_peer": "Le réseau de {person} bloque les appels directs.",
+    "call_path_try_again": "Réessayer",
+    "call_path_details": "Détails",
+    "call_path_details_hide": "Masquer les détails",
+    "call_path_restored": "Connecté à {person} directement.",
+    "call_path_restored_lan": "Connecté à {person} directement, via votre réseau local.",
+    "call_path_no_member_could_relay": "Impossible de joindre {person} directement, et personne d'autre dans l'appel n'a pu transmettre la connexion.",
+    "call_path_anonymous_no_direct": "Cet appareil est en mode anonyme, qui ne se connecte jamais directement, il ne peut donc pas joindre {person} directement.",
+    "call_path_restored_relay": "Connecté à {person} via {relayer}.",
+    "call_path_relayer_unnamed": "un autre membre",
+    "call_relay_switch": "Aider les autres personnes de cet appel à se connecter via cet appareil",
+    "call_relay_metered_note": "Désactivé en données mobiles sauf si vous l'activez : relayer les appels utilise vos données et votre batterie.",
+    "call_relaying_for": "Personnes connectées via cet appareil : {count}",
+    "call_relay_switch_node": "Aider les autres personnes de cet appel à se connecter via le nœud qui gère l'appel",
+    "call_full_no_count": "Cet appel a déjà atteint le nombre maximum de personnes qu'un appel peut avoir.",
+    "call_relaying_for_node": "Personnes connectées via le nœud qui gère l'appel : {count}"
   },
   "prompts": {
     "dma": {
@@ -6307,6 +6350,18 @@
       "granted": "Accordé",
       "revoked": "Révoqué",
       "expired": "Expiré"
+    },
+    "custody_kind": {
+      "label": "Détient une copie",
+      "gloss": "Un nœud déclarant détenir les octets d'un fichier, désignés par leur empreinte (hash)."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Reçu",
+      "gloss": "Un enregistrement attestant qu'une chose a été livrée. Annuler le reçu n'annule pas la livraison."
+    },
+    "file_version": {
+      "label": "Fichier",
+      "gloss": "Un fichier placé là où un groupe peut le voir, ses octets désignés par leur empreinte (hash)."
     }
   },
   "drive": {
@@ -6698,7 +6753,34 @@
     "video_two_people_only": "La vidéo et le partage d'écran fonctionnent pour l'instant uniquement dans les appels entre deux personnes. Cet appel compte plus de participants, il est donc uniquement vocal. Si votre caméra est activée, elle recommencera à transmettre lorsque l'appel reviendra à deux participants.",
     "relay_canonical_audio_only": "Leur vidéo ne peut pas vous parvenir pour le moment : la liaison entre vous ne transporte que le son. Vous pouvez toujours les entendre.",
     "share_already_live": "Vous partagez déjà votre écran.",
-    "no_share": "Vous ne partagez pas votre écran."
+    "no_share": "Vous ne partagez pas votre écran.",
+    "full": "Cet appel compte déjà 4 personnes, le maximum qu'un appel puisse avoir.",
+    "shaped_only": "Les appels ne sont pas disponibles tant que cet appareil est réglé sur « Toujours masquer quand je parle ».",
+    "relay_unavailable": "Relayer les appels pour d'autres personnes n'est pas encore disponible sur ce nœud.",
+    "end": {
+      "hung_up": "Vous avez quitté l'appel.",
+      "revoked": "Vous n'êtes plus membre de ce salon, l'appel a donc pris fin.",
+      "expired": "Le salon de cet appel a expiré, l'appel a donc pris fin."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Les deux réseaux attribuent les ports de manière aléatoire, une connexion directe est donc impossible.",
+      "punch_no_answer": "Une connexion directe a été tentée, mais rien n'est revenu.",
+      "punch_one_way": "Une connexion directe est passée dans un seul sens.",
+      "nat_undetermined": "La tentative de connexion s'est terminée avant que l'un ou l'autre réseau ait pu être mesuré.",
+      "no_facilitator": "Cet appareil n'a pas de point de rencontre pour une connexion directe, ou il n'a pas répondu.",
+      "refused_by_peer_policy": "L'appareil de cette personne n'accepte pas les connexions directes depuis celui-ci.",
+      "peer_unsupported": "L'appareil de cette personne ne peut pas établir de connexion directe.",
+      "budget_refused": "Les techniques de connexion plus complexes dont ces réseaux ont besoin sont retenues pour le moment. Réessayez dans un instant.",
+      "not_trusted": "Cet appareil ne partage pas son adresse avec l'appareil de cette personne.",
+      "no_member_could_relay": "Aucune connexion directe, et personne d'autre dans l'appel n'a pu la relayer.",
+      "anonymous_no_direct": "Cet appareil est anonyme, et les appareils anonymes ne se connectent jamais directement.",
+      "other": "La connexion n'a pas pu être établie."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Une autre personne dans l'appel le relaie.",
+      "none_available": "Personne dans l'appel n'a proposé de le relayer.",
+      "refused_by_policy": "Seul un serveur public CIRIS aurait pu le relayer, et les serveurs publics CIRIS ne relaient jamais les appels."
+    }
   },
   "decisions": {
     "not_found": "Cette décision n'est plus ouverte pour vous.",

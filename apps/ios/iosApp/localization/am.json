@@ -4069,7 +4069,50 @@
     "constitutional_armed_unknown": "የያዥ ማቆም ወደዚህ ኖድ እንደሚደርስ አይታወቅም፦ ይህ ኖድ ይህንን አያሳውቅም።",
     "constitutional_holders_count_m_unknown": "{n} የስምምነት ያዥ(ዎች)። ኖዱ ስንት መስማማት እንዳለባቸው አልዘገበም።",
     "accord_kind_confirmed": "የተረጋገጠ ማቆም — በሥራ ላይ ያለውን ማቆም ያረጋግጣል",
-    "accord_binding_confirmed": "ተረጋግጧል · የያዦቹ ከግማሽ በላይ አስቀድሞ በሥራ ላይ ያለውን የተጠቀሰውን ማቆም ያረጋግጣሉ። ይህ አዲስ ማቆም አይደለም እና ማስታወቂያም አይደለም።"
+    "accord_binding_confirmed": "ተረጋግጧል · የያዦቹ ከግማሽ በላይ አስቀድሞ በሥራ ላይ ያለውን የተጠቀሰውን ማቆም ያረጋግጣሉ። ይህ አዲስ ማቆም አይደለም እና ማስታወቂያም አይደለም።",
+    "call_path_other": "ከ{person} ጋር መገናኘት አልተቻለም።",
+    "call_relay_refused_by_policy": "ጥሪዎች በCIRIS የህዝብ ሰርቨሮች በኩል አይተላለፉም።",
+    "call_relay_none_available": "በአሁኑ ጊዜ ምንም ሪሌይ አይገኝም።",
+    "call_path_networks": "የእርስዎ አውታረ መረብ፦ {nat}። የ{person} አውታረ መረብ (እነሱ እንደሚዘግቡት)፦ {peer_nat}።",
+    "call_path_networks_peer_unknown": "የእርስዎ አውታረ መረብ፦ {nat}። የ{person} የአውታረ መረብ አይነት አይታወቅም።",
+    "call_nat_open": "ክፍት (ያለ NAT)",
+    "call_nat_full_cone": "ሙሉ-ኮን NAT",
+    "call_nat_restricted": "የተገደበ NAT",
+    "call_nat_port_restricted": "በወደብ የተገደበ NAT",
+    "call_nat_symmetric": "ሲሜትሪክ NAT",
+    "call_nat_unknown": "ያልታወቀ",
+    "call_path_port_open": "በእርስዎ ራውተር ላይ ወደብ ክፍት ነው (UPnP/NAT-PMP/PCP)።",
+    "call_path_action_local": "የእርስዎ አውታረ መረብ ቀጥተኛ ጥሪዎችን ያግዳል። ሌላ አውታረ መረብ ይሞክሩ፣ ለምሳሌ Wi-Fi ከሞባይል ዳታ ይልቅ።",
+    "call_path_action_peer": "የ{person} አውታረ መረብ ቀጥተኛ ጥሪዎችን ያግዳል።",
+    "call_path_try_again": "እንደገና ይሞክሩ",
+    "call_path_details": "ዝርዝሮች",
+    "call_path_details_hide": "ዝርዝሮችን ደብቅ",
+    "call_path_restored": "ከ{person} ጋር ቀጥተኛ ተገናኝቷል።",
+    "call_path_restored_lan": "ከ{person} ጋር ቀጥተኛ ተገናኝቷል፣ በእርስዎ የአካባቢ አውታረ መረብ በኩል።",
+    "call_path_no_member_could_relay": "ወደ {person} በቀጥታ መድረስ አልተቻለም፣ እና በጥሪው ውስጥ ያለ ማንም ሌላ ሰው ግንኙነቱን ማስተላለፍ አልቻለም።",
+    "call_path_anonymous_no_direct": "ይህ መሣሪያ ፈጽሞ በቀጥታ በማይገናኝ ስም-አልባ ሁነታ ላይ ነው፣ ስለዚህ ወደ {person} በቀጥታ መድረስ አይችልም።",
+    "call_path_restored_relay": "ከ{person} ጋር በ{relayer} በኩል ተገናኝቷል።",
+    "call_path_relayer_unnamed": "ሌላ አባል",
+    "call_relay_switch": "በዚህ ጥሪ ውስጥ ያሉ ሌሎችን በዚህ መሣሪያ በኩል እንዲገናኙ እርዷቸው",
+    "call_relay_metered_note": "እርስዎ እስካላበሩት ድረስ በሞባይል ዳታ ላይ ጠፍቷል፦ ጥሪዎችን ማስተላለፍ የእርስዎን ዳታ እና ባትሪ ይጠቀማል።",
+    "call_relaying_for": "በዚህ መሣሪያ በኩል የተገናኙ ሰዎች፦ {count}",
+    "call_relay_switch_node": "በዚህ ጥሪ ውስጥ ያሉ ሌሎችን ጥሪውን በሚያስኬደው ኖድ በኩል እንዲገናኙ እርዷቸው",
+    "call_full_no_count": "ይህ ጥሪ አስቀድሞ ጥሪ ሊኖረው የሚችለውን ከፍተኛ የሰዎች ቁጥር አለው።",
+    "call_relaying_for_node": "ጥሪውን በሚያስኬደው ኖድ በኩል የተገናኙ ሰዎች፦ {count}",
+    "call_you": "እርስዎ",
+    "call_connecting": "በማገናኘት ላይ… የእርስዎ ምስል እና ድምፅ ጥሪው ሌሎችን ሲደርስ ይጀምራሉ።",
+    "call_not_reached": "ይህ ጥሪ ማንንም አላገኘም። የሌላው ሰው መሣሪያ ከመስመር ውጪ ሊሆን ይችላል። መውጣት እና በኋላ እንደገና መሞከር ይችላሉ።",
+    "call_path_unnamed": "በዚህ ክፍል ውስጥ ያለ አንድ ሰው",
+    "call_path_both_nats_random": "የእርስዎ አውታረ መረብ እና የ{person} አውታረ መረብ እርስ በርስ በቀጥታ መገናኘት አይችሉም።",
+    "call_path_punch_no_answer": "ወደ {person} ቀጥተኛ መድረስ አልተቻለም፦ የግንኙነት ሙከራው መልስ አላገኘም።",
+    "call_path_punch_one_way": "ወደ {person} ቀጥተኛ መድረስ አልተቻለም፦ ግንኙነቱ የሰራው በአንድ አቅጣጫ ብቻ ነው።",
+    "call_path_nat_undetermined": "ወደ {person} ቀጥተኛ መድረስ አልተቻለም፣ እና የእርስዎ የአውታረ መረብ አይነት ሙሉ በሙሉ ሊወሰን አልቻለም።",
+    "call_path_no_facilitator": "ወደ {person} ቀጥተኛ መድረስ አልተቻለም፦ ግንኙነቱን ለማዋቀር የሚረዳ ሰርቨር አልነበረም።",
+    "call_path_refused_by_peer_policy": "ቀጥተኛ ግንኙነቶች በ{person} ኖድ ተቀባይነት የላቸውም።",
+    "call_path_peer_unsupported": "ወደ {person} ቀጥተኛ ግንኙነት አይቻልም፦ የእነሱ መተግበሪያ አይደግፈውም።",
+    "call_path_budget_refused": "አሁን በጣም ብዙ የግንኙነት ሙከራዎች ነበሩ። በ{seconds} ሰከንድ ውስጥ እንደገና ይሞክሩ።",
+    "call_path_budget_refused_shortly": "አሁን በጣም ብዙ የግንኙነት ሙከራዎች ነበሩ። በቅርቡ እንደገና ይሞክሩ።",
+    "call_path_not_trusted": "ተጨማሪ የግንኙነት ዘዴዎች ጥቅም ላይ የሚውሉት እርስዎ ከሚያምኗቸው ሰዎች ጋር ብቻ ነው፣ ስለዚህ ለ{person} አልተሞከሩም።"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "ተፈቅዷል",
       "revoked": "ተሰርዟል",
       "expired": "ጊዜው አልፎበታል"
+    },
+    "custody_kind": {
+      "label": "ቅጂ ይዟል",
+      "gloss": "ኖድ ለአንድ ፋይል ባይቶችን እንደያዘ የሚናገር፣ በሃሽ ስም የተጠቀሱ።"
+    },
+    "delivery_ack_stream_id": {
+      "label": "ደረሰኝ",
+      "gloss": "ነገር እንደተላከ የሚያሳይ መዝገብ። ደረሰኙን መሰረዝ መላኩን አይሰርዝም።"
+    },
+    "file_version": {
+      "label": "ፋይል",
+      "gloss": "ቡድን ሊያየው በሚችልበት ቦታ የተቀመጠ ፋይል፣ ባይቶቹ በሃሽ ስማቸው የተጠቀሱ።"
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "ቪዲዮ እና የማያ ገጽ መጋራት ለአሁኑ በሁለት ሰዎች መካከል በሚደረጉ ጥሪዎች ውስጥ ይሰራሉ። ይህ ጥሪ ከዚያ በላይ ተሳታፊዎች አሉት፣ ስለዚህ የድምፅ ብቻ ነው። ካሜራዎ በርቶ ከሆነ፣ ጥሪው ወደ ሁለት ተሳታፊዎች ሲመለስ እንደገና መላክ ይጀምራል።",
     "relay_canonical_audio_only": "ቪዲዮአቸው አሁን ሊደርስዎት አይችልም፦ በእርስዎ እና በእነሱ መካከል ያለው መንገድ ድምጽ ብቻ ይይዛል። አሁንም ሊሰሟቸው ይችላሉ።",
     "share_already_live": "ማያ ገጽዎን አስቀድመው በማጋራት ላይ ነዎት።",
-    "no_share": "ማያ ገጽዎን በማጋራት ላይ አይደሉም።"
+    "no_share": "ማያ ገጽዎን በማጋራት ላይ አይደሉም።",
+    "full": "ይህ ጥሪ አስቀድሞ 4 ሰዎች አሉት፣ ይህም ጥሪ ሊኖረው የሚችለው ከፍተኛ ቁጥር ነው።",
+    "shaped_only": "ይህ መሣሪያ ወደ \"ስናገር ሁልጊዜ ደብቀኝ\" ተቀናብሮ ባለበት ጊዜ ጥሪዎች አይገኙም።",
+    "relay_unavailable": "ለሌሎች ጥሪዎችን ማስተላለፍ በዚህ ኖድ ላይ ገና አይገኝም።",
+    "end": {
+      "hung_up": "ከጥሪው ወጥተዋል።",
+      "revoked": "እርስዎ የዚህ ክፍል አባል ስላልሆኑ፣ ጥሪው አብቅቷል።",
+      "expired": "የዚህ ጥሪ ክፍል ጊዜው አልፎበታል፣ ስለዚህ ጥሪው አብቅቷል።"
+    },
+    "media_path_failed": {
+      "both_nats_random": "ሁለቱም መረቦች ወደቦችን በዘፈቀደ ይመድባሉ፣ ስለዚህ ቀጥተኛ ግንኙነት ሊደረግ አይችልም።",
+      "punch_no_answer": "ቀጥተኛ ግንኙነት ተሞክሮ ነበር እና ምንም ምላሽ አልተመለሰም።",
+      "punch_one_way": "ቀጥተኛ ግንኙነት በአንድ አቅጣጫ ብቻ ደርሷል።",
+      "nat_undetermined": "የግንኙነት ሙከራው ከሁለቱ መረቦች ውስጥ አንዳቸውም ሳይለኩ አብቅቷል።",
+      "no_facilitator": "ይህ መሣሪያ ለቀጥተኛ ግንኙነት መገናኛ ነጥብ የለውም፣ ወይም አልመለሰም።",
+      "refused_by_peer_policy": "የእነሱ መሣሪያ ከዚህ መሣሪያ ቀጥተኛ ግንኙነቶችን አይቀበልም።",
+      "peer_unsupported": "የእነሱ መሣሪያ ቀጥተኛ ግንኙነት ማድረግ አይችልም።",
+      "budget_refused": "እነዚህ መረቦች የሚያስፈልጓቸው ይበልጥ ከባድ የግንኙነት ዘዴዎች ለአሁኑ ተይዘው ቆይተዋል። በቅርቡ እንደገና ይሞክሩ።",
+      "not_trusted": "ይህ መሣሪያ አድራሻውን ከዚያ ሰው መሣሪያ ጋር አያጋራም።",
+      "no_member_could_relay": "ቀጥተኛ ግንኙነት የለም፣ እና በጥሪው ውስጥ ያለ ማንም ሌላ ሰው ሊያስተላልፈው አልቻለም።",
+      "anonymous_no_direct": "ይህ መሣሪያ ስም-አልባ ነው፣ እና ስም-አልባ መሣሪያዎች ፈጽሞ በቀጥታ አይገናኙም።",
+      "other": "ግንኙነቱ ሊደረግ አልቻለም።"
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "በጥሪው ውስጥ ያለ ሌላ ሰው እያስተላለፈው ነው።",
+      "none_available": "በጥሪው ውስጥ ያለ ማንም ሰው ለማስተላለፍ አላቀረበም።",
+      "refused_by_policy": "ሊያስተላልፈው የሚችለው አንድ የCIRIS የህዝብ ሰርቨር ብቻ ነው፣ እና የCIRIS የህዝብ ሰርቨሮች ጥሪዎችን ፈጽሞ አያስተላልፉም።"
+    }
   },
   "decisions": {
     "not_found": "ያ ውሳኔ ለእርስዎ ከዚህ በኋላ ክፍት አይደለም።",

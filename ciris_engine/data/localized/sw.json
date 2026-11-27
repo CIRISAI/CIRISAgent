@@ -4069,7 +4069,50 @@
     "constitutional_armed_unknown": "Kama kusimamishwa kwa mshikilizi kungefikia nodi hii hakujulikani: nodi hii haitoi taarifa hiyo.",
     "constitutional_holders_count_m_unknown": "{n} washikilizi wa accord. Nodi haikutoa taarifa ni wangapi kati yao wanaohitajika kukubaliana.",
     "chat_file_added": "{who} aliongeza {name} kwenye chumba",
-    "chat_file_added_you": "Uliongeza {name} kwenye chumba"
+    "chat_file_added_you": "Uliongeza {name} kwenye chumba",
+    "call_you": "Wewe",
+    "call_connecting": "Inaunganisha… Picha na sauti yako zitaanza mara simu itakapowafikia wengine.",
+    "call_not_reached": "Simu hii haijamfikia yeyote. Kifaa cha mtu mwingine kinaweza kuwa nje ya mtandao. Unaweza kuondoka na kujaribu tena baadaye.",
+    "call_path_unnamed": "mtu fulani katika chumba hiki",
+    "call_path_both_nats_random": "Mtandao wako na mtandao wa {person} haviwezi kuunganika moja kwa moja.",
+    "call_path_punch_no_answer": "Imeshindikana kumfikia {person} moja kwa moja: jaribio la muunganisho halikupata jibu.",
+    "call_path_punch_one_way": "Imeshindikana kumfikia {person} moja kwa moja: muunganisho ulifanya kazi upande mmoja tu.",
+    "call_path_nat_undetermined": "Imeshindikana kumfikia {person} moja kwa moja, na aina ya mtandao wako haikuweza kubainika kikamilifu.",
+    "call_path_no_facilitator": "Imeshindikana kumfikia {person} moja kwa moja: hakuna seva iliyokuwepo kusaidia kuanzisha muunganisho.",
+    "call_path_refused_by_peer_policy": "Miunganisho ya moja kwa moja haikubaliwi na nodi ya {person}.",
+    "call_path_peer_unsupported": "Muunganisho wa moja kwa moja kwa {person} hauwezekani: programu yake haiuhimili.",
+    "call_path_budget_refused": "Majaribio mengi mno ya kuunganisha sasa hivi. Jaribu tena baada ya sekunde {seconds}.",
+    "call_path_budget_refused_shortly": "Majaribio mengi mno ya kuunganisha sasa hivi. Jaribu tena baadaye kidogo.",
+    "call_path_not_trusted": "Njia za ziada za muunganisho hutumika tu na watu unaowaamini, kwa hivyo hazikujaribiwa kwa {person}.",
+    "call_path_other": "Imeshindikana kuunganisha na {person}.",
+    "call_relay_refused_by_policy": "Miito haipitishwi kupitia seva za umma za CIRIS.",
+    "call_relay_none_available": "Hakuna relay inayopatikana kwa sasa.",
+    "call_path_networks": "Mtandao wako: {nat}. Mtandao wa {person} (kama anavyouripoti): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Mtandao wako: {nat}. Aina ya mtandao wa {person} haijulikani.",
+    "call_nat_open": "wazi (hakuna NAT)",
+    "call_nat_full_cone": "NAT ya koni kamili",
+    "call_nat_restricted": "NAT yenye vizuizi",
+    "call_nat_port_restricted": "NAT yenye vizuizi vya bandari",
+    "call_nat_symmetric": "NAT linganifu",
+    "call_nat_unknown": "haijulikani",
+    "call_path_port_open": "Bandari imefunguliwa kwenye ruta yako (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Mtandao wako unazuia simu za moja kwa moja. Jaribu mtandao mwingine, kwa mfano Wi-Fi badala ya data ya simu.",
+    "call_path_action_peer": "Mtandao wa {person} unazuia simu za moja kwa moja.",
+    "call_path_try_again": "Jaribu tena",
+    "call_path_details": "Maelezo",
+    "call_path_details_hide": "Ficha maelezo",
+    "call_path_restored": "Umeunganishwa na {person} moja kwa moja.",
+    "call_path_restored_lan": "Umeunganishwa na {person} moja kwa moja, kupitia mtandao wako wa ndani.",
+    "call_path_no_member_could_relay": "Imeshindikana kumfikia {person} moja kwa moja, na hakuna mwanachama mwingine kwenye simu aliyeweza kusambaza muunganisho.",
+    "call_path_anonymous_no_direct": "Kifaa hiki kiko katika hali ya kutojulikana, ambayo haiwahi kuunganisha moja kwa moja, hivyo hakiwezi kumfikia {person} moja kwa moja.",
+    "call_path_restored_relay": "Umeunganishwa na {person} kupitia {relayer}.",
+    "call_path_relayer_unnamed": "mwanachama mwingine",
+    "call_relay_switch": "Saidia wengine kwenye simu hii kuunganisha kupitia kifaa hiki",
+    "call_relay_metered_note": "Imezimwa kwenye data ya simu isipokuwa ukiiwasha: kusambaza simu hutumia data na betri yako.",
+    "call_relaying_for": "Watu waliounganishwa kupitia kifaa hiki: {count}",
+    "call_relay_switch_node": "Saidia wengine kwenye simu hii kuunganisha kupitia nodi inayoendesha simu hiyo",
+    "call_full_no_count": "Simu hii tayari ina idadi ya juu zaidi ya watu ambayo simu inaweza kuwa nayo.",
+    "call_relaying_for_node": "Watu waliounganishwa kupitia nodi inayoendesha simu: {count}"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "Imetolewa",
       "revoked": "Imebatilishwa",
       "expired": "Muda umeisha"
+    },
+    "custody_kind": {
+      "label": "Inashikilia nakala",
+      "gloss": "Nodi ikisema inashikilia baiti za faili, zinazotambuliwa kwa hashi yao."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Risiti",
+      "gloss": "Rekodi kwamba kitu kimewasilishwa. Kubatilisha risiti hakubatilishi uwasilishaji."
+    },
+    "file_version": {
+      "label": "Faili",
+      "gloss": "Faili iliyowekwa mahali ambapo kundi linaweza kuiona, baiti zake zikitambuliwa kwa hashi yao."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Video na kushiriki skrini hufanya kazi kwenye simu kati ya watu wawili kwa sasa. Simu hii ina watu zaidi, hivyo ni ya sauti pekee. Ikiwa kamera yako imewashwa, itaanza kutuma tena wakati simu itakaporudi kuwa ya watu wawili.",
     "relay_canonical_audio_only": "Video yao haiwezi kukufikia kwa sasa: njia iliyo baina yenu inabeba sauti pekee. Bado unaweza kuwasikia.",
     "share_already_live": "Tayari unashiriki skrini yako.",
-    "no_share": "Hushiriki skrini yako kwa sasa."
+    "no_share": "Hushiriki skrini yako kwa sasa.",
+    "full": "Simu hii tayari ina watu 4, idadi ya juu zaidi ambayo simu inaweza kuwa nayo.",
+    "shaped_only": "Simu haziwezi kufanyika wakati kifaa hiki kimewekwa kwenye \"Jificha kila ninapozungumza\".",
+    "relay_unavailable": "Kusambaza simu kwa ajili ya wengine hakupatikani bado kwenye nodi hii.",
+    "end": {
+      "hung_up": "Umeondoka kwenye simu.",
+      "revoked": "Wewe si mwanachama wa chumba hiki tena, hivyo simu imeisha.",
+      "expired": "Chumba cha simu hii kimeisha muda wake, hivyo simu imeisha."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Mitandao yote miwili hugawa milango kwa nasibu, hivyo muunganisho wa moja kwa moja hauwezi kufanyika.",
+      "punch_no_answer": "Muunganisho wa moja kwa moja ulijaribiwa na hakuna kilichorudi.",
+      "punch_one_way": "Muunganisho wa moja kwa moja ulifanikiwa upande mmoja tu.",
+      "nat_undetermined": "Jaribio la muunganisho liliisha kabla ya mtandao wowote kupimwa.",
+      "no_facilitator": "Kifaa hiki hakina sehemu ya kukutania kwa muunganisho wa moja kwa moja, au hakikujibu.",
+      "refused_by_peer_policy": "Kifaa chao hakikubali miunganisho ya moja kwa moja kutoka kwa hiki.",
+      "peer_unsupported": "Kifaa chao hakiwezi kufanya muunganisho wa moja kwa moja.",
+      "budget_refused": "Mbinu ngumu zaidi za muunganisho zinazohitajika na mitandao hii zimezuiliwa kwa sasa. Jaribu tena baadaye kidogo.",
+      "not_trusted": "Kifaa hiki hakishiriki anwani yake na kifaa cha mtu huyo.",
+      "no_member_could_relay": "Hakuna muunganisho wa moja kwa moja, na hakuna mwanachama mwingine kwenye simu aliyeweza kuisambaza.",
+      "anonymous_no_direct": "Kifaa hiki hakijulikani, na vifaa visivyojulikana haviwahi kuunganisha moja kwa moja.",
+      "other": "Muunganisho haukuweza kufanyika."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Mtu mwingine kwenye simu anaisambaza.",
+      "none_available": "Hakuna aliyeko kwenye simu aliyejitolea kuisambaza.",
+      "refused_by_policy": "Ni seva ya umma ya CIRIS pekee ingeweza kuisambaza, na seva za umma za CIRIS hazipitishi simu kamwe."
+    }
   },
   "decisions": {
     "not_found": "Uamuzi huo haupo wazi kwako tena.",

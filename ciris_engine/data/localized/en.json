@@ -4263,7 +4263,50 @@
     "wa_identity_profile_mismatch": "This agent's identity doesn't match its approved template. No identity change applies until that is settled.",
     "wa_identity_profile_contested": "This agent's identity is contested. No identity change applies until that is settled.",
     "wa_identity_profile_unknown": "This agent reported an identity status this app doesn't know.",
-    "wa_identity_open_base_link": "Open the base-link request"
+    "wa_identity_open_base_link": "Open the base-link request",
+    "call_you": "You",
+    "call_connecting": "Connecting… Your picture and sound start once the call reaches the others.",
+    "call_not_reached": "This call hasn't reached anyone. The other person's device may be offline. You can leave and try again later.",
+    "call_path_unnamed": "someone in this room",
+    "call_path_both_nats_random": "Your network and the network of {person} can't connect to each other directly.",
+    "call_path_punch_no_answer": "Couldn't reach {person} directly: the connection attempt got no answer.",
+    "call_path_punch_one_way": "Couldn't reach {person} directly: the connection only worked in one direction.",
+    "call_path_nat_undetermined": "Couldn't reach {person} directly, and your network type couldn't be fully determined.",
+    "call_path_no_facilitator": "Couldn't reach {person} directly: no server was available to help set up the connection.",
+    "call_path_refused_by_peer_policy": "Direct connections aren't accepted by the node of {person}.",
+    "call_path_peer_unsupported": "A direct connection to {person} isn't possible: their app doesn't support it.",
+    "call_path_budget_refused": "Too many connection attempts just now. Try again in {seconds} s.",
+    "call_path_budget_refused_shortly": "Too many connection attempts just now. Try again shortly.",
+    "call_path_not_trusted": "Extra connection methods are used only with people you trust, so they weren't tried for {person}.",
+    "call_path_other": "Couldn't connect to {person}.",
+    "call_relay_refused_by_policy": "Calls aren't relayed through the CIRIS public servers.",
+    "call_relay_none_available": "No relay is available right now.",
+    "call_path_networks": "Your network: {nat}. The network of {person} (as they report it): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Your network: {nat}. The network type of {person} isn't known.",
+    "call_nat_open": "open (no NAT)",
+    "call_nat_full_cone": "full-cone NAT",
+    "call_nat_restricted": "restricted NAT",
+    "call_nat_port_restricted": "port-restricted NAT",
+    "call_nat_symmetric": "symmetric NAT",
+    "call_nat_unknown": "unknown",
+    "call_path_port_open": "A port is open on your router (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Your network blocks direct calls. Try a different network, for example Wi-Fi instead of mobile data.",
+    "call_path_action_peer": "The network of {person} blocks direct calls.",
+    "call_path_try_again": "Try again",
+    "call_path_details": "Details",
+    "call_path_details_hide": "Hide details",
+    "call_path_restored": "Connected to {person} directly.",
+    "call_path_restored_lan": "Connected to {person} directly, over your local network.",
+    "call_path_no_member_could_relay": "Couldn't reach {person} directly, and no one else in the call could pass the connection along.",
+    "call_path_anonymous_no_direct": "This device is in anonymous mode, which never connects directly, so it can't reach {person} directly.",
+    "call_path_restored_relay": "Connected to {person} through {relayer}.",
+    "call_path_relayer_unnamed": "another member",
+    "call_relay_switch": "Help others in this call connect through this device",
+    "call_relay_metered_note": "Off on mobile data unless you turn it on: passing calls along uses your data and battery.",
+    "call_relaying_for": "People connected through this device: {count}",
+    "call_relay_switch_node": "Help others in this call connect through the node that runs the call",
+    "call_full_no_count": "This call already has the most people a call can have.",
+    "call_relaying_for_node": "People connected through the node that runs the call: {count}"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
@@ -6325,6 +6368,18 @@
       "granted": "Granted",
       "revoked": "Revoked",
       "expired": "Expired"
+    },
+    "custody_kind": {
+      "label": "Holds a copy",
+      "gloss": "A node saying it holds the bytes for a file, named by their hash."
+    },
+    "file_version": {
+      "label": "File",
+      "gloss": "A file placed where a group can see it, its bytes named by their hash."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Receipt",
+      "gloss": "A record that something was delivered. Undoing the receipt does not undo the delivery."
     }
   },
   "drive": {
@@ -6698,7 +6753,34 @@
     "video_two_people_only": "Video and screen sharing work in calls between two people for now. This call has more, so it's voice only. If your camera is on, it starts sending again when the call is back to two.",
     "relay_canonical_audio_only": "Their video can't reach you right now: the route between you carries sound only. You can still hear them.",
     "share_already_live": "You're already sharing your screen.",
-    "no_share": "You aren't sharing your screen."
+    "no_share": "You aren't sharing your screen.",
+    "full": "This call already has 4 people, the most a call can have.",
+    "shaped_only": "Calls aren't available while this device is set to \"Always hide when I talk\".",
+    "relay_unavailable": "Passing calls along for others isn't available on this node yet.",
+    "end": {
+      "hung_up": "You left the call.",
+      "revoked": "You're no longer a member of this room, so the call ended.",
+      "expired": "This call's room expired, so the call ended."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Both networks assign ports at random, so a direct connection can't be made.",
+      "punch_no_answer": "A direct connection was tried and nothing came back.",
+      "punch_one_way": "A direct connection got through in one direction only.",
+      "nat_undetermined": "The connection attempt ended before either network could be measured.",
+      "no_facilitator": "This device has no meeting point for a direct connection, or it didn't answer.",
+      "refused_by_peer_policy": "Their device doesn't accept direct connections from this one.",
+      "peer_unsupported": "Their device can't make a direct connection.",
+      "budget_refused": "The harder connection techniques these networks need are held back for now. Try again shortly.",
+      "not_trusted": "This device doesn't share its address with that person's device.",
+      "no_member_could_relay": "No direct connection, and no one else in the call could relay it.",
+      "anonymous_no_direct": "This device is anonymous, and anonymous devices never connect directly.",
+      "other": "The connection couldn't be made."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Another person in the call is relaying it.",
+      "none_available": "No one in the call offered to relay it.",
+      "refused_by_policy": "Only a CIRIS public server could relay it, and the CIRIS public servers never relay calls."
+    }
   },
   "decisions": {
     "not_found": "That decision isn't open for you any more.",

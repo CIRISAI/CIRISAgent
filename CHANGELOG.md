@@ -5,6 +5,17 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.3-stable] - 2026-11-26
+
+### Changed
+
+- **ciris-client 0.5.243** (pinned to ciris-server 0.5.254). Takes desktop FFmpeg natives from `ciris-holon`, adds call failure reasons, relay-for-others, call-full cap, self-view and participant list, dynamic video encoder sizing, and CC v1.0-rc22 namespace registry. Merges 70 new app strings per locale into the agent's bundle across all 29 locales and the three app mirrors (`check_client_strings.py --merge`, 2,030 keys added; no existing string changed), and rebuilds `apps/ios/Resources.zip`.
+- **Moved to `openai>=2.0.0,<3.0.0` and `instructor>=1.17.0,<2.0.0`** (#1383). Removes the `openai<2` pin that forced pip to backtrack `instructor` to `1.12.0` and `jiter` to `0.10.0` (which has no `cp315` wheel). With `instructor 1.18.0` (`jiter==0.18.0`), Python 3.13, 3.14, and 3.15 all resolve purely from wheels on Windows and Linux. Adds a Python 3.13/3.14/3.15 wheels-only CI install matrix workflow and updates `setup.py` classifiers to 3.13–3.15. Android (`openai==1.12.0`, `instructor==1.2.6`) and iOS remain pinned separately and compatible.
+
+### Fixed
+
+- **Preserved LLM error handling across `instructor` 1.17** (#1383). Unwraps non-retryable provider/transport SDK errors (`APITimeoutError`, `InternalServerError`, `RateLimitError`, `AuthenticationError`, `BadRequestError`) from `instructor 1.17`'s `InstructorRetryException` wrapper so timeout, 5xx, 401, and 400-remediation handlers still see the underlying SDK error; detects `InstructorRetryException` via `instructor.core` as well as legacy `instructor.exceptions`; uses `Mode.JSON`/`Mode.TOOLS` with `from_anthropic()`; targets `instructor.v2.providers.gemini.utils` (with legacy fallback) for the Gemini harm-category patch; and switches `mobile_local_llm` from `instructor.patch()` to `instructor.from_openai()`.
+
 ## [2.23.2-stable] - 2026-11-20
 
 ### Changed

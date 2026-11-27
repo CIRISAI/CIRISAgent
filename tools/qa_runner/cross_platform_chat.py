@@ -51,16 +51,17 @@ import argparse
 import json
 import re
 import secrets
+import struct
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple, Union
 
 # ── Wire ────────────────────────────────────────────────────────────────────
 
-#: A request body: every route this stage calls takes flat string fields.
-Body = Dict[str, str]
+#: A request body: flat JSON fields sent to a node's HTTP API.
+Body = Dict[str, Any]
 #: A parsed JSON object from a node (the server's shapes, read defensively).
 JsonObject = Dict[str, Any]
 
@@ -138,6 +139,134 @@ class HttpxTransport:
         return HttpResult(r.status_code, parsed)
 
 
+class CallSocket(Protocol):
+    """One open call frames WebSocket (v1 binary frames + JSON text events)."""
+
+    def recv(self, timeout_s: float) -> Optional[Union[str, bytes]]:
+        """Return the next message, or None on timeout."""
+        ...
+
+    def send(self, data: bytes) -> None:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
+class CallTransport(Protocol):
+    """How the stage opens a node's call frames WebSocket."""
+
+    def connect(self, path_and_query: str, token: Optional[str] = None) -> CallSocket:
+        ...
+
+
+class _WebsocketsCallSocket:
+    def __init__(self, ws: Any) -> None:
+        self._ws = ws
+
+    def recv(self, timeout_s: float) -> Optional[Union[str, bytes]]:
+        try:
+            msg = self._ws.recv(timeout=timeout_s)
+        except TimeoutError:
+            return None
+        if isinstance(msg, (str, bytes)):
+            return msg
+        return bytes(msg)
+
+    def send(self, data: bytes) -> None:
+        self._ws.send(data)
+
+    def close(self) -> None:
+        try:
+            self._ws.close()
+        except Exception:  # noqa: BLE001 - best-effort teardown
+            pass
+
+
+class WebsocketsCallTransport:
+    """Real WebSocket client for `/v1/chat/{cid}/call/frames?ticket=...`."""
+
+    def __init__(self, ws_base_url: str, timeout_s: float = 15.0) -> None:
+        self.ws_base_url = ws_base_url.rstrip("/")
+        self.timeout_s = timeout_s
+
+    def connect(self, path_and_query: str, token: Optional[str] = None) -> CallSocket:
+        from websockets.sync.client import connect
+
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        ws = connect(
+            f"{self.ws_base_url}{path_and_query}",
+            additional_headers=headers,
+            open_timeout=self.timeout_s,
+            max_size=None,
+        )
+        return _WebsocketsCallSocket(ws)
+
+
+# ── Call frames v1 (CIRISServer src/call_frames.rs) ─────────────────────────
+
+CALL_FRAME_VERSION = 1
+CALL_CODEC_AUDIO = 0xFF
+CALL_CODEC_AV1 = 0x01
+CALL_FLAG_FRAME_SEQ = 0x01
+#: 16 KB video frame — well above one chunk budget, proving video fragmentation (0.5.254+).
+CALL_VIDEO_FRAME_BYTES = 16 * 1024
+
+
+@dataclass(frozen=True)
+class IncomingCallFrame:
+    codec_id: int
+    layer: Tuple[int, int, int]
+    publisher: str
+    stream_id: bytes
+    epoch: int
+    chunk_seq: int
+    source_ts_ms: int
+    frame_seq: Optional[int]
+    payload: bytes
+
+
+def encode_outgoing_call_frame(
+    codec_id: int,
+    payload: bytes,
+    layer: Tuple[int, int, int] = (0, 0, 0),
+) -> bytes:
+    """Encode a client -> node v1 call frame."""
+    return struct.pack(">BBBBB", CALL_FRAME_VERSION, codec_id, layer[0], layer[1], layer[2]) + payload
+
+
+def decode_incoming_call_frame(buf: bytes) -> IncomingCallFrame:
+    """Decode a node -> client v1 call frame."""
+    if len(buf) < 7:
+        raise ValueError(f"truncated call frame ({len(buf)} bytes)")
+    ver, codec_id, s, t, q, pub_len = struct.unpack_from(">BBBBBH", buf, 0)
+    if ver != CALL_FRAME_VERSION:
+        raise ValueError(f"unsupported call frame version {ver}")
+    at = 7
+    if len(buf) < at + pub_len + 32 + 24 + 5:
+        raise ValueError(f"truncated call frame body ({len(buf)} bytes, pub_len={pub_len})")
+    publisher = buf[at : at + pub_len].decode("utf-8")
+    at += pub_len
+    stream_id = buf[at : at + 32]
+    at += 32
+    epoch, chunk_seq, source_ts_ms = struct.unpack_from(">QQQ", buf, at)
+    at += 24
+    flags, raw_frame_seq = struct.unpack_from(">BI", buf, at)
+    at += 5
+    frame_seq = raw_frame_seq if (flags & CALL_FLAG_FRAME_SEQ) else None
+    return IncomingCallFrame(
+        codec_id=codec_id,
+        layer=(s, t, q),
+        publisher=publisher,
+        stream_id=stream_id,
+        epoch=epoch,
+        chunk_seq=chunk_seq,
+        source_ts_ms=source_ts_ms,
+        frame_seq=frame_seq,
+        payload=buf[at:],
+    )
+
+
 class Clock(Protocol):
     def now(self) -> float:
         ...
@@ -162,6 +291,7 @@ LAYER_LOCAL_API = "local-api"
 LAYER_CONTACTS = "contacts"
 LAYER_ROOM = "room"
 LAYER_MESSAGE = "message"
+LAYER_CALL = "call"
 
 
 @dataclass
@@ -179,6 +309,8 @@ class Deadlines:
     room_open_s: float = 180.0
     send_s: float = 120.0
     receive_s: float = 180.0
+    call_ready_s: float = 90.0
+    call_media_s: float = 45.0
     poll_s: float = 10.0
     #: Re-POST a converging add every N polls (the add is idempotent).
     repost_every: int = 3
@@ -195,6 +327,7 @@ class Node:
     token: Optional[str] = None
     fed_id: Optional[str] = None
     code: Optional[str] = None
+    call_transport: Optional[CallTransport] = None
 
 
 @dataclass
@@ -1004,6 +1137,229 @@ class CrossChatStage:
             timings.append(f"{src.name}->{dst.name} {self.clock.now() - started:.1f}s")
         return "after the direct-link window: " + ", ".join(timings) + " (relayed baseline ~10 s each way)"
 
+    def video_call(self, a: Node, b: Node, cid: str) -> str:
+        """Two-node live video + audio call over the pair room's call frames WebSocket.
+
+        Both sides join with ``video: true``, open ``frames_socket?ticket=...``
+        (Linux through the agent's :8080 WS proxy; Android via :4243), wait for
+        ``ready`` with ``fragmenting: true`` and at least one leg on each node,
+        then exchange both audio (0xFF) and 16 KB AV1 video frames (0x01,
+        exercising ciris-server 0.5.254 frame fragmentation) in both directions
+        and assert byte-exact arrival with the sender's fedID and ``frame_seq``.
+        """
+        step = "video_call"
+        assert a.call_transport is not None and b.call_transport is not None
+        trail: List[str] = []
+        sockets: Dict[str, CallSocket] = {}
+        joined: List[Node] = []
+        try:
+            # 1. Both sides join the room's call with video enabled.
+            join_info: Dict[str, JsonObject] = {}
+            for node in (a, b):
+                r = self._call(node, "POST", f"/v1/chat/{cid}/call", {"video": True})
+                trail.append(r.trail(f"{node.name} POST /v1/chat/{cid}/call"))
+                p = _payload(r.body)
+                if not (r.ok and isinstance(p, dict)):
+                    raise self._fail(step, LAYER_CALL, f"{node.name} could not join the call: {r.brief()}", trail[-6:])
+                if p.get("video_allowed") is False:
+                    raise self._fail(step, LAYER_CALL, f"{node.name} reported video_allowed=false in pair call", trail[-6:])
+                fsock = str(p.get("frames_socket") or f"/v1/chat/{cid}/call/frames")
+                ticket = str(p.get("frames_ticket") or "")
+                if not ticket:
+                    raise self._fail(step, LAYER_CALL, f"{node.name} join response carried no frames_ticket", trail[-6:])
+                join_info[node.name] = {"frames_socket": fsock, "frames_ticket": ticket}
+                joined.append(node)
+
+            # 2. Both sides open their frames WebSocket.
+            for node in (a, b):
+                info = join_info[node.name]
+                ws_path = f"{info['frames_socket']}?ticket={info['frames_ticket']}"
+                assert node.call_transport is not None
+                try:
+                    sockets[node.name] = node.call_transport.connect(ws_path, node.token)
+                    trail.append(f"{node.name} WS {info['frames_socket']} -> connected")
+                except Exception as exc:  # noqa: BLE001 - connection failure is a call failure
+                    raise self._fail(
+                        step,
+                        LAYER_CALL,
+                        f"{node.name} could not open call frames socket ({type(exc).__name__}: {exc})",
+                        trail[-6:],
+                    )
+
+            # 3. Wait for `ready` (with fragmenting=true) on both sockets.
+            ready_events: Dict[str, JsonObject] = {}
+            ready_deadline = self.clock.now() + self.d.call_ready_s
+            while len(ready_events) < 2 and self.clock.now() < ready_deadline:
+                for node in (a, b):
+                    if node.name in ready_events:
+                        continue
+                    msg = sockets[node.name].recv(0.25)
+                    if isinstance(msg, str):
+                        try:
+                            ev = json.loads(msg)
+                        except ValueError:
+                            continue
+                        if isinstance(ev, dict):
+                            etype = ev.get("type")
+                            if etype == "ready":
+                                ready_events[node.name] = ev
+                                trail.append(
+                                    f"{node.name} WS ready budget={ev.get('frame_budget_bytes')} "
+                                    f"fragmenting={ev.get('fragmenting')}"
+                                )
+                            elif etype in ("call_ended", "call_full", "publish_refused"):
+                                raise self._fail(
+                                    step,
+                                    LAYER_CALL,
+                                    f"{node.name} call socket received {etype} before ready: {ev}",
+                                    trail[-8:],
+                                )
+                if len(ready_events) < 2:
+                    self.clock.sleep(0.05)
+
+            for node in (a, b):
+                if node.name not in ready_events:
+                    raise self._fail(
+                        step,
+                        LAYER_CALL,
+                        f"{node.name} never received `ready` on its call frames socket within {self.d.call_ready_s:.0f}s",
+                        trail[-8:],
+                    )
+                if not ready_events[node.name].get("fragmenting"):
+                    raise self._fail(
+                        step,
+                        LAYER_CALL,
+                        f"{node.name} ready event reported fragmenting={ready_events[node.name].get('fragmenting')!r} "
+                        "(video fragmentation requires ciris-server >= 0.5.254)",
+                        trail[-8:],
+                    )
+
+            # 4. Wait until GET /v1/chat/{cid}/call shows legs formed on both nodes.
+            def both_legs(_: int) -> Optional[str]:
+                for node in (a, b):
+                    r = self._call(node, "GET", f"/v1/chat/{cid}/call")
+                    p = _payload(r.body) if r.ok else None
+                    legs = p.get("legs") if isinstance(p, dict) else None
+                    joined_obj = p.get("joined") if isinstance(p, dict) else None
+                    if legs is None and isinstance(joined_obj, dict):
+                        legs = joined_obj.get("legs")
+                    if isinstance(legs, list):
+                        has_leg = len(legs) > 0
+                    elif isinstance(legs, (int, float)):
+                        has_leg = legs > 0
+                    else:
+                        has_leg = False
+                    if not has_leg:
+                        return None
+                return "legs up"
+
+            if self._poll(self.d.call_ready_s, both_legs) is None:
+                raise self._fail(
+                    step,
+                    LAYER_CALL,
+                    f"call legs never formed on both nodes within {self.d.call_ready_s:.0f}s",
+                    trail[-8:],
+                )
+
+            # 5. Send audio (0xFF) + 16 KB AV1 video (0x01) both ways and verify byte-exact arrival.
+            audio_payloads: Dict[str, bytes] = {}
+            video_payloads: Dict[str, bytes] = {}
+            for node in (a, b):
+                tag_a = f"ciris-audio-{node.name}-{self.nonce}".encode("utf-8")
+                audio_payloads[node.name] = (tag_a + bytes(range(256)))[:96]
+                tag_v = f"ciris-video-{node.name}-{self.nonce}|".encode("utf-8")
+                body_len = CALL_VIDEO_FRAME_BYTES - len(tag_v)
+                pattern = bytes((i * 31 + len(node.name)) & 0xFF for i in range(256))
+                video_payloads[node.name] = tag_v + (pattern * (body_len // 256 + 1))[:body_len]
+
+            got_audio: Dict[str, int] = {a.name: 0, b.name: 0}
+            got_video: Dict[str, int] = {a.name: 0, b.name: 0}
+            rx_total: Dict[str, int] = {a.name: 0, b.name: 0}
+            rx_publishers: Dict[str, set[str]] = {a.name: set(), b.name: set()}
+            media_deadline = self.clock.now() + self.d.call_media_s
+            last_send = -1.0
+
+            while self.clock.now() < media_deadline:
+                now = self.clock.now()
+                if last_send < 0 or now - last_send >= 0.5:
+                    for node in (a, b):
+                        sockets[node.name].send(encode_outgoing_call_frame(CALL_CODEC_AUDIO, audio_payloads[node.name]))
+                        sockets[node.name].send(encode_outgoing_call_frame(CALL_CODEC_AV1, video_payloads[node.name]))
+                    last_send = now
+
+                for reader, sender in ((a, b), (b, a)):
+                    msg = sockets[reader.name].recv(0.1)
+                    if msg is None:
+                        continue
+                    if isinstance(msg, str):
+                        try:
+                            ev = json.loads(msg)
+                        except ValueError:
+                            continue
+                        if isinstance(ev, dict) and ev.get("type") == "publish_refused":
+                            raise self._fail(
+                                step,
+                                LAYER_CALL,
+                                f"{reader.name} call socket refused frame: {ev}",
+                                trail[-8:],
+                            )
+                        continue
+                    try:
+                        frame = decode_incoming_call_frame(msg)
+                    except ValueError as exc:
+                        raise self._fail(step, LAYER_CALL, f"{reader.name} received malformed frame: {exc}", trail[-8:])
+                    rx_total[reader.name] += 1
+                    if frame.publisher:
+                        rx_publishers[reader.name].add(frame.publisher)
+                    # frame.publisher is the peer's node key_id (distinct from owner fed_id);
+                    # the payload carries the sender's name + per-run cryptographic nonce.
+                    if not frame.publisher:
+                        continue
+                    if frame.codec_id == CALL_CODEC_AUDIO and frame.payload == audio_payloads[sender.name]:
+                        got_audio[reader.name] += 1
+                    elif (
+                        frame.codec_id == CALL_CODEC_AV1
+                        and frame.frame_seq is not None
+                        and frame.payload == video_payloads[sender.name]
+                    ):
+                        got_video[reader.name] += 1
+
+                if all(v >= 1 for v in got_audio.values()) and all(v >= 1 for v in got_video.values()):
+                    break
+                self.clock.sleep(0.05)
+
+            missing = []
+            for reader, sender in ((a, b), (b, a)):
+                if got_audio[reader.name] < 1:
+                    missing.append(
+                        f"{reader.name} missing audio from {sender.name} "
+                        f"(rx_total={rx_total[reader.name]} pubs={sorted(rx_publishers[reader.name])})"
+                    )
+                if got_video[reader.name] < 1:
+                    missing.append(
+                        f"{reader.name} missing {CALL_VIDEO_FRAME_BYTES}-byte video from {sender.name} "
+                        f"(rx_total={rx_total[reader.name]} pubs={sorted(rx_publishers[reader.name])})"
+                    )
+            if missing:
+                raise self._fail(
+                    step,
+                    LAYER_CALL,
+                    f"live video call did not complete both ways within {self.d.call_media_s:.0f}s: "
+                    + "; ".join(missing),
+                    trail[-8:],
+                )
+            return (
+                f"both sides joined with video (fragmenting=true) and exchanged audio + "
+                f"{CALL_VIDEO_FRAME_BYTES}-byte AV1 video frames byte-exact "
+                f"({a.name} rx audio={got_audio[a.name]}/video={got_video[a.name]}, "
+                f"{b.name} rx audio={got_audio[b.name]}/video={got_video[b.name]})"
+            )
+        finally:
+            for sock in sockets.values():
+                sock.close()
+            for node in joined:
+                self._call(node, "DELETE", f"/v1/chat/{cid}/call")
+
     # -- the whole stage --
 
     def run(self) -> StageReport:
@@ -1051,6 +1407,9 @@ class CrossChatStage:
         for name, layer, fn in chat:
             if not self._step(name, layer, fn).ok:
                 return self._finish()
+        if a.call_transport is not None and b.call_transport is not None:
+            if not self._step("video_call", LAYER_CALL, lambda: self.video_call(a, b, cid)).ok:
+                return self._finish()
         self._step("timed", LAYER_MESSAGE, lambda: self.timed_exchange(a, b, cid), enforced=False)
         return self._finish()
 
@@ -1092,11 +1451,30 @@ def scan_logs(paths: Iterable[Path], tail: int = 40) -> List[str]:
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
-def _parse_node(spec: str, username: str, password: str, timeout_s: float) -> Node:
+def _http_to_ws(url: str) -> str:
+    if url.startswith("https://"):
+        return "wss://" + url[len("https://") :]
+    if url.startswith("http://"):
+        return "ws://" + url[len("http://") :]
+    return url
+
+
+def _parse_node(
+    spec: str,
+    username: str,
+    password: str,
+    timeout_s: float,
+    ws_overrides: Optional[Dict[str, str]] = None,
+    enable_video_call: bool = True,
+) -> Node:
     name, _, url = spec.partition("=")
     if not name or not url:
         raise SystemExit(f"--node must be NAME=URL, got {spec!r}")
-    return Node(name, HttpxTransport(url, timeout_s), username, password)
+    call_transport: Optional[CallTransport] = None
+    if enable_video_call:
+        ws_url = (ws_overrides or {}).get(name) or _http_to_ws(url)
+        call_transport = WebsocketsCallTransport(ws_url, timeout_s=timeout_s)
+    return Node(name, HttpxTransport(url, timeout_s), username, password, call_transport=call_transport)
 
 
 def _annotate(rep: StageReport) -> None:
@@ -1141,6 +1519,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="run the stage between two live nodes")
     run.add_argument("--node", action="append", required=True, help="NAME=BASE_URL, exactly twice (A then B)")
+    run.add_argument(
+        "--ws-url",
+        action="append",
+        default=[],
+        help="Optional NAME=WS_BASE_URL override for the call frames WebSocket (defaults to --node URL as ws://)",
+    )
+    run.add_argument("--no-video-call", action="store_true", help="Skip the live cross-platform video call check")
     run.add_argument("--username", required=True)
     run.add_argument("--password", required=True)
     run.add_argument("--out", type=Path, default=None, help="write the JSON report here")
@@ -1181,7 +1566,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if len(args.node) != 2:
         raise SystemExit("--node must be given exactly twice")
-    a, b = (_parse_node(s, args.username, args.password, args.http_timeout) for s in args.node)
+    ws_overrides: Dict[str, str] = {}
+    for spec in args.ws_url:
+        wname, _, wurl = spec.partition("=")
+        if not wname or not wurl:
+            raise SystemExit(f"--ws-url must be NAME=WS_URL, got {spec!r}")
+        ws_overrides[wname] = wurl
+    a, b = (
+        _parse_node(s, args.username, args.password, args.http_timeout, ws_overrides, not args.no_video_call)
+        for s in args.node
+    )
     stage = CrossChatStage(a, b, deadlines=Deadlines(poll_s=args.poll_secs))
     rep = stage.run()
     if args.out:

@@ -585,3 +585,156 @@ def test_negative_a_disagreeing_or_self_reordered_transcript_fails(knob, why):
     rep = stage.run()
     assert not rep.ok and rep.failed_step == "conversation", rep.to_json()
     assert why in _step(rep, "conversation").detail
+
+
+# ── Cross-platform live video call tests ────────────────────────────────────
+
+
+def _encode_incoming(
+    codec_id: int,
+    publisher: str,
+    payload: bytes,
+    frame_seq: Optional[int],
+    layer: Tuple[int, int, int] = (0, 0, 0),
+) -> bytes:
+    import struct
+
+    pub = publisher.encode("utf-8")
+    flags = xc.CALL_FLAG_FRAME_SEQ if frame_seq is not None else 0
+    return (
+        struct.pack(">BBBBBH", xc.CALL_FRAME_VERSION, codec_id, layer[0], layer[1], layer[2], len(pub))
+        + pub
+        + (b"\x11" * 32)
+        + struct.pack(">QQQBI", 1, 1, 1_700_000_000_000, flags, frame_seq or 0)
+        + payload
+    )
+
+
+class _FakeCallBus:
+    def __init__(
+        self,
+        fed: Dict[str, str],
+        *,
+        fragmenting: bool = True,
+        drop_video: bool = False,
+        refuse_video: bool = False,
+    ) -> None:
+        self.fed = fed
+        self.fragmenting = fragmenting
+        self.drop_video = drop_video
+        self.refuse_video = refuse_video
+        self.queues: Dict[str, List[object]] = {k: [] for k in fed}
+        self.seq: Dict[str, int] = {k: 0 for k in fed}
+        self.closed: List[str] = []
+
+    def connect(self, name: str) -> "_FakeCallSocket":
+        self.queues[name].append(
+            json.dumps({"type": "ready", "frame_budget_bytes": 1200, "fragmenting": self.fragmenting})
+        )
+        return _FakeCallSocket(self, name)
+
+    def forward(self, sender: str, raw: bytes) -> None:
+        codec_id = raw[1]
+        payload = raw[5:]
+        if codec_id == xc.CALL_CODEC_AV1 and self.refuse_video:
+            self.queues[sender].append(json.dumps({"type": "publish_refused", "reason": "over_budget"}))
+            return
+        if codec_id == xc.CALL_CODEC_AV1 and self.drop_video:
+            return
+        frame_seq = None
+        if codec_id != xc.CALL_CODEC_AUDIO:
+            self.seq[sender] += 1
+            frame_seq = self.seq[sender]
+        encoded = _encode_incoming(codec_id, self.fed[sender], payload, frame_seq)
+        for peer in self.fed:
+            if peer != sender:
+                self.queues[peer].append(encoded)
+
+
+class _FakeCallSocket:
+    def __init__(self, bus: _FakeCallBus, name: str) -> None:
+        self.bus = bus
+        self.name = name
+
+    def recv(self, timeout_s: float) -> Optional[object]:
+        q = self.bus.queues[self.name]
+        return q.pop(0) if q else None
+
+    def send(self, data: bytes) -> None:
+        self.bus.forward(self.name, data)
+
+    def close(self) -> None:
+        self.bus.closed.append(self.name)
+
+
+class _FakeCallTransport:
+    def __init__(self, bus: _FakeCallBus, name: str) -> None:
+        self.bus = bus
+        self.name = name
+
+    def connect(self, path_and_query: str, token: Optional[str] = None) -> _FakeCallSocket:
+        assert "ticket=" in path_and_query
+        return self.bus.connect(self.name)
+
+
+class _CallHttpTransport(FakeTransport):
+    def request(self, method, path, body=None, token=None):
+        if self.net.room and path == f"/v1/chat/{self.net.room}/call" and method == "POST":
+            return xc.HttpResult(
+                200,
+                {
+                    "video_allowed": True,
+                    "frames_socket": f"/v1/chat/{self.net.room}/call/frames",
+                    "frames_ticket": f"tkt-{self.name}",
+                },
+            )
+        if self.net.room and path == f"/v1/chat/{self.net.room}/call" and method == "GET":
+            return xc.HttpResult(200, {"legs": [{"peer": "other"}]})
+        if self.net.room and path == f"/v1/chat/{self.net.room}/call" and method == "DELETE":
+            return xc.HttpResult(200, {"left": "left"})
+        return super().request(method, path, body, token)
+
+
+def _stage_with_call(**bus_kwargs):
+    clock = FakeClock()
+    fed = {"linux": "alice-aaaa", "android": "bob-bbbb"}
+    # Production frames carry the node key_id as publisher, distinct from owner fed_id.
+    node_keys = {"linux": "cirisagent-desktop-node-1111", "android": "cirisagent-android-node-2222"}
+    net = FakeNet(clock=clock, fed=fed)
+    bus = _FakeCallBus(node_keys, **bus_kwargs)
+    a = xc.Node("linux", _CallHttpTransport(net, "linux"), "u", "p", call_transport=_FakeCallTransport(bus, "linux"))
+    b = xc.Node(
+        "android", _CallHttpTransport(net, "android"), "u", "p", call_transport=_FakeCallTransport(bus, "android")
+    )
+    return xc.CrossChatStage(a, b, clock=clock, log=lambda _: None), bus
+
+
+def test_cross_platform_video_call_exchanges_audio_and_16kb_video_both_ways():
+    stage, bus = _stage_with_call()
+    rep = stage.run()
+    assert rep.ok, rep.to_json()
+    st = _step(rep, "video_call")
+    assert st.ok and st.layer == xc.LAYER_CALL
+    assert "16384-byte AV1 video frames byte-exact" in st.detail
+    assert set(bus.closed) == {"linux", "android"}
+
+
+def test_cross_platform_video_call_fails_without_fragmenting():
+    stage, _ = _stage_with_call(fragmenting=False)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "video_call" and rep.failed_layer == xc.LAYER_CALL
+    assert "fragmenting=False" in _step(rep, "video_call").detail
+
+
+def test_cross_platform_video_call_fails_on_publish_refused():
+    stage, _ = _stage_with_call(refuse_video=True)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "video_call" and rep.failed_layer == xc.LAYER_CALL
+    assert "publish_refused" in _step(rep, "video_call").detail
+
+
+def test_cross_platform_video_call_fails_when_video_frames_never_arrive():
+    stage, _ = _stage_with_call(drop_video=True)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "video_call" and rep.failed_layer == xc.LAYER_CALL
+    assert "missing 16384-byte video" in _step(rep, "video_call").detail

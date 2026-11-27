@@ -92,9 +92,10 @@ if [ "$SYNC" = true ]; then
         "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
     ok "ciris_engine synced"
 
-    # Sync ciris_adapters
-    rsync -a --delete --exclude='__pycache__' \
+    # Sync ciris_adapters (never bundle local dev _build_secrets.py)
+    rsync -a --delete --exclude='__pycache__' --exclude='*_build_secrets*' \
         "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+    find "$RESOURCES_DIR/app" -name '*_build_secrets*' -delete
     ok "ciris_adapters synced"
 
     # Sync ciris_ios (if source exists)

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 from pydantic import BaseModel
 
@@ -311,16 +311,19 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
             # default here is a single attempt.
             max_retries=0,
         )
-        patched = instructor.patch(client)
+        # from_openai, not patch: since instructor 1.17 patch() returns the bare
+        # AsyncOpenAI type, which has no response_model (#1383). from_openai has
+        # existed since instructor 1.0, so Android's 1.2.6 pin has it too.
+        patched = instructor.from_openai(client)
 
         response = await patched.chat.completions.create(
             model=self._config.model_variant.value,
-            messages=list(messages),
+            messages=cast(Any, list(messages)),
             response_model=response_model,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        # instructor.patch returns the response_model instance
+        # instructor returns the response_model instance
         result: BaseModel = response
         return result
 

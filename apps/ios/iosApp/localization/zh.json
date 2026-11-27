@@ -4069,7 +4069,50 @@
     "wa_identity_profile_mismatch": "此智能体的身份与其已批准的模板不匹配。在此问题解决之前，任何身份更改均不会生效。",
     "wa_identity_profile_contested": "此智能体的身份存在争议。在争议解决之前，任何身份更改均不会生效。",
     "wa_identity_profile_unknown": "此智能体报告了一个本应用无法识别的身份状态。",
-    "wa_identity_open_base_link": "打开基础链接请求"
+    "wa_identity_open_base_link": "打开基础链接请求",
+    "call_you": "您",
+    "call_connecting": "连接中……一旦通话到达对方，您的画面和声音才会开始传输。",
+    "call_not_reached": "此通话未能接通任何人。对方的设备可能处于离线状态。您可以离开并稍后重试。",
+    "call_path_unnamed": "此房间中的某人",
+    "call_path_both_nats_random": "您的网络与{person}的网络无法直接相互连接。",
+    "call_path_punch_no_answer": "无法直接联系到{person}：连接尝试未得到应答。",
+    "call_path_punch_one_way": "无法直接联系到{person}：连接仅在单一方向上有效。",
+    "call_path_nat_undetermined": "无法直接联系到{person}，并且无法完全确定您的网络类型。",
+    "call_path_no_facilitator": "无法直接联系到{person}：没有可用的服务器来协助建立连接。",
+    "call_path_refused_by_peer_policy": "{person}的节点不接受直接连接。",
+    "call_path_peer_unsupported": "无法与{person}建立直接连接：对方的应用不支持此功能。",
+    "call_path_budget_refused": "刚才的连接尝试次数过多。请在 {seconds} 秒后重试。",
+    "call_path_budget_refused_shortly": "刚才的连接尝试次数过多。请稍后重试。",
+    "call_path_not_trusted": "额外的连接方式仅用于您信任的人，因此未对{person}尝试。",
+    "call_path_other": "无法连接到{person}。",
+    "call_relay_refused_by_policy": "通话不会通过 CIRIS 公共服务器转发。",
+    "call_relay_none_available": "目前没有可用的中继。",
+    "call_path_networks": "您的网络：{nat}。{person}的网络（由其报告）：{peer_nat}。",
+    "call_path_networks_peer_unknown": "您的网络：{nat}。{person}的网络类型未知。",
+    "call_nat_open": "开放（无 NAT）",
+    "call_nat_full_cone": "完全圆锥型 NAT",
+    "call_nat_restricted": "受限型 NAT",
+    "call_nat_port_restricted": "端口受限型 NAT",
+    "call_nat_symmetric": "对称型 NAT",
+    "call_nat_unknown": "未知",
+    "call_path_port_open": "您的路由器上已开放一个端口（UPnP/NAT-PMP/PCP）。",
+    "call_path_action_local": "您的网络阻止了直接通话。请尝试使用其他网络，例如改用 Wi-Fi 而非移动数据。",
+    "call_path_action_peer": "{person}的网络阻止了直接通话。",
+    "call_path_try_again": "重试",
+    "call_path_details": "详情",
+    "call_path_details_hide": "隐藏详情",
+    "call_path_restored": "已直接连接到{person}。",
+    "call_path_restored_lan": "已通过您的本地网络直接连接到{person}。",
+    "call_path_no_member_could_relay": "无法直接联系到{person}，且通话中没有其他人可以转接此连接。",
+    "call_path_anonymous_no_direct": "此设备处于匿名模式，该模式从不进行直接连接，因此无法直接联系到{person}。",
+    "call_path_restored_relay": "已通过{relayer}连接到{person}。",
+    "call_path_relayer_unnamed": "另一位成员",
+    "call_relay_switch": "帮助此通话中的其他人通过此设备连接",
+    "call_relay_metered_note": "在移动数据下默认关闭，除非您手动开启：为他人转接通话会消耗您的流量和电量。",
+    "call_relaying_for": "通过此设备连接的人数：{count}",
+    "call_relay_switch_node": "帮助此通话中的其他人通过运行此通话的节点连接",
+    "call_full_no_count": "此通话人数已达到上限。",
+    "call_relaying_for_node": "通过运行此通话的节点连接的人数：{count}"
   },
   "prompts": {
     "dma": {
@@ -6280,6 +6323,18 @@
       "granted": "已授予",
       "revoked": "已撤销",
       "expired": "已过期"
+    },
+    "custody_kind": {
+      "label": "持有副本",
+      "gloss": "某节点声明自己持有某文件的字节内容，以其哈希值命名。"
+    },
+    "delivery_ack_stream_id": {
+      "label": "收据",
+      "gloss": "记录某物已被投递的凭证。撤销此凭证并不会撤销投递本身。"
+    },
+    "file_version": {
+      "label": "文件",
+      "gloss": "放置在某群组可见位置的文件，其字节内容以哈希值命名。"
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "目前，视频和屏幕共享仅支持双人通话。此次通话人数更多，因此仅支持语音。如果您的摄像头已开启，当通话恢复为双人时，它会重新开始发送画面。",
     "relay_canonical_audio_only": "对方的视频目前无法传送到您这里：您与对方之间的路由仅支持传输声音。您仍然可以听到对方的声音。",
     "share_already_live": "您已经在共享屏幕了。",
-    "no_share": "您当前没有共享屏幕。"
+    "no_share": "您当前没有共享屏幕。",
+    "full": "此通话已有 4 人，已达到通话人数上限。",
+    "shaped_only": "此设备设置为“通话时始终隐藏”时，无法使用通话功能。",
+    "relay_unavailable": "此节点尚不支持为他人转接通话。",
+    "end": {
+      "hung_up": "您已离开通话。",
+      "revoked": "您已不再是此房间的成员，通话因此结束。",
+      "expired": "此通话的房间已过期，通话因此结束。"
+    },
+    "media_path_failed": {
+      "both_nats_random": "双方网络都随机分配端口，因此无法建立直接连接。",
+      "punch_no_answer": "已尝试建立直接连接，但没有收到任何回应。",
+      "punch_one_way": "直接连接仅单向接通。",
+      "nat_undetermined": "连接尝试在任一网络被测定之前就已结束。",
+      "no_facilitator": "此设备没有用于直接连接的汇合点，或者它没有响应。",
+      "refused_by_peer_policy": "对方设备不接受来自此设备的直接连接。",
+      "peer_unsupported": "对方设备无法建立直接连接。",
+      "budget_refused": "这些网络所需的更复杂连接技术目前暂缓启用。请稍后重试。",
+      "not_trusted": "此设备不会与对方设备共享其地址。",
+      "no_member_could_relay": "无法直接连接，且通话中没有其他人可以中继它。",
+      "anonymous_no_direct": "此设备处于匿名状态，而匿名设备从不进行直接连接。",
+      "other": "无法建立连接。"
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "通话中的另一位成员正在中继它。",
+      "none_available": "通话中没有人提供中继。",
+      "refused_by_policy": "只有 CIRIS 公共服务器才能中继它，而 CIRIS 公共服务器从不中继通话。"
+    }
   },
   "decisions": {
     "not_found": "该决定对您已不再开放。",

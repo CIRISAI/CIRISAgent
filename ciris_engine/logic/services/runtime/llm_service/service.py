@@ -1012,6 +1012,25 @@ def _is_timeout_exception(error: BaseException) -> bool:
     return isinstance(error, (TimeoutError, httpx.TimeoutException)) or "timeout" in type(error).__name__.lower()
 
 
+def _is_instructor_retry_exception(error: BaseException) -> bool:
+    """Return True if ``error`` is an instructor retry wrapper.
+
+    instructor >= 1.17 no longer attaches ``instructor.exceptions`` at import
+    time and exposes ``InstructorRetryException`` from ``instructor.core``.
+    Still check ``instructor.exceptions`` when present so tests that mock it
+    keep working (#1383).
+    """
+    exc_mod = getattr(instructor, "exceptions", None)
+    exc_cls = getattr(exc_mod, "InstructorRetryException", None)
+    if isinstance(exc_cls, type) and issubclass(exc_cls, BaseException) and isinstance(error, exc_cls):
+        return True
+    try:
+        from instructor.core import InstructorRetryException
+    except ImportError:
+        return False
+    return isinstance(error, InstructorRetryException)
+
+
 def _env(*names: str) -> str:
     """Get first non-empty value from env var names (CIRIS_ prefix checked first)."""
     for name in names:
@@ -1483,17 +1502,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # default (2) retried timeouts inside one call, tripling it (#1186).
         self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
 
-        # ANTHROPIC_TOOLS forces the response tool (tool_choice "tool"), which is
+        # Tool mode forces the response tool (tool_choice "tool"), which is
         # a 400 on Opus 5.5 / Sonnet 5.5 / Fable 5.x: every call failed. Those
-        # get ANTHROPIC_JSON (schema in the prompt, validated), as the HTTPS
+        # get JSON mode (schema in the prompt, validated), as the HTTPS
         # path does; older models keep tool-based extraction.
+        # instructor >= 1.17 picks the provider from from_anthropic(), so the
+        # generic JSON / TOOLS modes are the Anthropic handlers; the old
+        # ANTHROPIC_JSON / ANTHROPIC_TOOLS names are deprecated aliases (#1383).
         from .anthropic_http import claude_rejects_forced_tool_use
 
-        mode = (
-            instructor.Mode.ANTHROPIC_JSON
-            if claude_rejects_forced_tool_use(model_name)
-            else instructor.Mode.ANTHROPIC_TOOLS
-        )
+        mode = instructor.Mode.JSON if claude_rejects_forced_tool_use(model_name) else instructor.Mode.TOOLS
         self.instruct_client = instructor.from_anthropic(self.client, mode=mode)
         logger.info(f"Initialized native Anthropic client with model={model_name}, mode={mode}")
 
@@ -1521,7 +1539,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # The SDK includes HARM_CATEGORY_JAILBREAK but the API doesn't support it for all models
         try:
             from google.genai.types import HarmBlockThreshold, HarmCategory
-            from instructor.providers.gemini import utils as instructor_gemini_utils
+
+            # instructor >= 1.17 calls update_genai_kwargs from the v2 module.
+            # instructor.providers.gemini.utils is now a re-export facade, so a
+            # patch set there is never called (#1383). Fall back to the legacy
+            # module path for older pinned builds (e.g. mobile).
+            import importlib
+
+            try:
+                instructor_gemini_utils: Any = importlib.import_module("instructor.v2.providers.gemini.utils")
+            except ImportError:
+                instructor_gemini_utils = importlib.import_module("instructor.providers.gemini.utils")
 
             _original_update_genai_kwargs = instructor_gemini_utils.update_genai_kwargs
 
@@ -2043,6 +2071,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                             f"for {resp_model.__name__} (thought_id={thought_id})"
                         )
                     else:
+                        # instructor >= 1.17 wraps non-retryable provider/transport
+                        # errors in InstructorRetryException even when our tenacity
+                        # policy does not retry them. Unwrap so the specific handlers
+                        # below see the underlying SDK error directly (#1383).
+                        cause = inst_exc.__cause__
+                        if (
+                            _is_instructor_retry_exception(inst_exc)
+                            and isinstance(cause, Exception)
+                            and isinstance(cause, (AuthenticationError, BadRequestError) + _transport_error_types())
+                        ):
+                            raise cause
                         raise
 
                 _call_duration = _time.monotonic() - _call_start
@@ -2711,21 +2750,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     def _handle_general_exception(self, e: Exception, resp_model_name: str) -> None:
         """Handle general exceptions including instructor retry exceptions."""
         # Check if this is an instructor retry exception
-        if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
-            if isinstance(e, instructor.exceptions.InstructorRetryException):
-                self._track_error(e)
-                self._total_errors += 1
-                error_context = LLMErrorContext(
-                    model=self.model_name,
-                    provider=self.openai_config.base_url or "default",
-                    response_model=resp_model_name,
-                    circuit_breaker_state=self.circuit_breaker.state.value,
-                    consecutive_failures=self.circuit_breaker.consecutive_failures,
-                )
-                self.last_error = _root_provider_error(e)
-                self.last_fault_code = _root_provider_fault(e)
-                self.last_fault_at = time.monotonic()
-                _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
+        if _is_instructor_retry_exception(e):
+            self._track_error(e)
+            self._total_errors += 1
+            error_context = LLMErrorContext(
+                model=self.model_name,
+                provider=self.openai_config.base_url or "default",
+                response_model=resp_model_name,
+                circuit_breaker_state=self.circuit_breaker.state.value,
+                consecutive_failures=self.circuit_breaker.consecutive_failures,
+            )
+            self.last_error = _root_provider_error(e)
+            self.last_fault_code = _root_provider_fault(e)
+            self.last_fault_at = time.monotonic()
+            _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
         self._track_error(e)

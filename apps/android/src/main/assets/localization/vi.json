@@ -4482,7 +4482,50 @@
     "wa_identity_profile_mismatch": "Danh tính của tác nhân này không khớp với mẫu đã được chấp thuận. Không có thay đổi danh tính nào có hiệu lực cho đến khi việc đó được giải quyết.",
     "wa_identity_profile_contested": "Danh tính của tác nhân này đang bị tranh chấp. Không có thay đổi danh tính nào có hiệu lực cho đến khi việc đó được giải quyết.",
     "wa_identity_profile_unknown": "Tác nhân này đã báo cáo một trạng thái danh tính mà ứng dụng này không biết.",
-    "wa_identity_open_base_link": "Mở yêu cầu liên kết cơ sở"
+    "wa_identity_open_base_link": "Mở yêu cầu liên kết cơ sở",
+    "call_you": "Bạn",
+    "call_connecting": "Đang kết nối… Hình ảnh và âm thanh của bạn sẽ bắt đầu khi cuộc gọi đến được những người khác.",
+    "call_not_reached": "Cuộc gọi này chưa đến được với ai. Thiết bị của người kia có thể đang ngoại tuyến. Bạn có thể rời khỏi và thử lại sau.",
+    "call_path_unnamed": "ai đó trong phòng này",
+    "call_path_both_nats_random": "Mạng của bạn và mạng của {person} không thể kết nối trực tiếp với nhau.",
+    "call_path_punch_no_answer": "Không thể kết nối trực tiếp đến {person}: lần thử kết nối không nhận được phản hồi.",
+    "call_path_punch_one_way": "Không thể kết nối trực tiếp đến {person}: kết nối chỉ hoạt động theo một chiều.",
+    "call_path_nat_undetermined": "Không thể kết nối trực tiếp đến {person}, và loại mạng của bạn không thể được xác định đầy đủ.",
+    "call_path_no_facilitator": "Không thể kết nối trực tiếp đến {person}: không có máy chủ nào khả dụng để giúp thiết lập kết nối.",
+    "call_path_refused_by_peer_policy": "Nút của {person} không chấp nhận kết nối trực tiếp.",
+    "call_path_peer_unsupported": "Không thể kết nối trực tiếp đến {person}: ứng dụng của họ không hỗ trợ điều này.",
+    "call_path_budget_refused": "Vừa có quá nhiều lần thử kết nối. Hãy thử lại sau {seconds} giây.",
+    "call_path_budget_refused_shortly": "Vừa có quá nhiều lần thử kết nối. Hãy thử lại sau ít lâu.",
+    "call_path_not_trusted": "Các phương thức kết nối bổ sung chỉ được sử dụng với những người bạn tin cậy, vì vậy chúng không được thử với {person}.",
+    "call_path_other": "Không thể kết nối đến {person}.",
+    "call_relay_refused_by_policy": "Cuộc gọi không được chuyển tiếp qua các máy chủ công khai của CIRIS.",
+    "call_relay_none_available": "Hiện không có relay nào khả dụng.",
+    "call_path_networks": "Mạng của bạn: {nat}. Mạng của {person} (theo báo cáo của họ): {peer_nat}.",
+    "call_path_networks_peer_unknown": "Mạng của bạn: {nat}. Loại mạng của {person} không được biết.",
+    "call_nat_open": "mở (không có NAT)",
+    "call_nat_full_cone": "NAT nón đầy đủ",
+    "call_nat_restricted": "NAT hạn chế",
+    "call_nat_port_restricted": "NAT hạn chế cổng",
+    "call_nat_symmetric": "NAT đối xứng",
+    "call_nat_unknown": "không xác định",
+    "call_path_port_open": "Một cổng đang mở trên router của bạn (UPnP/NAT-PMP/PCP).",
+    "call_path_action_local": "Mạng của bạn chặn cuộc gọi trực tiếp. Hãy thử một mạng khác, ví dụ Wi-Fi thay vì dữ liệu di động.",
+    "call_path_action_peer": "Mạng của {person} chặn cuộc gọi trực tiếp.",
+    "call_path_try_again": "Thử lại",
+    "call_path_details": "Chi tiết",
+    "call_path_details_hide": "Ẩn chi tiết",
+    "call_path_restored": "Đã kết nối trực tiếp đến {person}.",
+    "call_path_restored_lan": "Đã kết nối trực tiếp đến {person}, qua mạng cục bộ của bạn.",
+    "call_path_no_member_could_relay": "Không thể kết nối trực tiếp đến {person}, và không ai khác trong cuộc gọi có thể chuyển tiếp kết nối.",
+    "call_path_anonymous_no_direct": "Thiết bị này đang ở chế độ ẩn danh, và chế độ này không bao giờ kết nối trực tiếp, nên không thể kết nối trực tiếp đến {person}.",
+    "call_path_restored_relay": "Đã kết nối đến {person} qua {relayer}.",
+    "call_path_relayer_unnamed": "một thành viên khác",
+    "call_relay_switch": "Giúp người khác trong cuộc gọi này kết nối qua thiết bị này",
+    "call_relay_metered_note": "Tắt khi dùng dữ liệu di động trừ khi bạn bật lên: chuyển tiếp cuộc gọi sẽ tiêu tốn dữ liệu và pin của bạn.",
+    "call_relaying_for": "Số người đang kết nối qua thiết bị này: {count}",
+    "call_relay_switch_node": "Giúp người khác trong cuộc gọi này kết nối qua nút đang điều hành cuộc gọi",
+    "call_full_no_count": "Cuộc gọi này đã có số người tối đa mà một cuộc gọi có thể có.",
+    "call_relaying_for_node": "Số người đang kết nối qua nút đang điều hành cuộc gọi: {count}"
   },
   "network": {
     "title": "Mạng",
@@ -6280,6 +6323,18 @@
       "granted": "Đã cấp",
       "revoked": "Đã thu hồi",
       "expired": "Đã hết hạn"
+    },
+    "custody_kind": {
+      "label": "Giữ một bản sao",
+      "gloss": "Một nút cho biết rằng nó đang giữ các byte của một tệp, được xác định bằng mã băm của chúng."
+    },
+    "delivery_ack_stream_id": {
+      "label": "Biên nhận",
+      "gloss": "Một bản ghi cho biết điều gì đó đã được giao. Hủy biên nhận không hủy việc giao hàng."
+    },
+    "file_version": {
+      "label": "Tệp",
+      "gloss": "Một tệp được đặt ở nơi một nhóm có thể xem nó, các byte của nó được xác định bằng mã băm của chúng."
     }
   },
   "drive": {
@@ -6671,7 +6726,34 @@
     "video_two_people_only": "Video và chia sẻ màn hình hiện chỉ hoạt động trong cuộc gọi giữa hai người. Cuộc gọi này có nhiều người hơn, nên đây là cuộc gọi chỉ có thoại. Nếu camera của bạn đang bật, nó sẽ bắt đầu gửi lại khi cuộc gọi trở về còn hai người.",
     "relay_canonical_audio_only": "Video của họ hiện không thể đến được với bạn: tuyến đường giữa hai bên chỉ mang âm thanh. Bạn vẫn có thể nghe thấy họ.",
     "share_already_live": "Bạn đang chia sẻ màn hình của mình rồi.",
-    "no_share": "Bạn không chia sẻ màn hình của mình."
+    "no_share": "Bạn không chia sẻ màn hình của mình.",
+    "full": "Cuộc gọi này đã có 4 người, số người tối đa mà một cuộc gọi có thể có.",
+    "shaped_only": "Cuộc gọi không khả dụng khi thiết bị này được đặt thành \"Luôn ẩn khi tôi nói\".",
+    "relay_unavailable": "Chuyển tiếp cuộc gọi cho người khác chưa khả dụng trên nút này.",
+    "end": {
+      "hung_up": "Bạn đã rời khỏi cuộc gọi.",
+      "revoked": "Bạn không còn là thành viên của phòng này, nên cuộc gọi đã kết thúc.",
+      "expired": "Phòng của cuộc gọi này đã hết hạn, nên cuộc gọi đã kết thúc."
+    },
+    "media_path_failed": {
+      "both_nats_random": "Cả hai mạng đều gán cổng một cách ngẫu nhiên, nên không thể thiết lập kết nối trực tiếp.",
+      "punch_no_answer": "Đã thử kết nối trực tiếp nhưng không có phản hồi nào.",
+      "punch_one_way": "Kết nối trực tiếp chỉ thành công theo một chiều.",
+      "nat_undetermined": "Nỗ lực kết nối đã kết thúc trước khi một trong hai mạng có thể được đo.",
+      "no_facilitator": "Thiết bị này không có điểm gặp để kết nối trực tiếp, hoặc nó không phản hồi.",
+      "refused_by_peer_policy": "Thiết bị của họ không chấp nhận kết nối trực tiếp từ thiết bị này.",
+      "peer_unsupported": "Thiết bị của họ không thể tạo kết nối trực tiếp.",
+      "budget_refused": "Các kỹ thuật kết nối phức tạp hơn mà những mạng này cần hiện đang bị tạm giữ lại. Hãy thử lại sau ít lâu.",
+      "not_trusted": "Thiết bị này không chia sẻ địa chỉ của nó với thiết bị của người đó.",
+      "no_member_could_relay": "Không có kết nối trực tiếp, và không ai khác trong cuộc gọi có thể chuyển tiếp nó.",
+      "anonymous_no_direct": "Thiết bị này đang ở chế độ ẩn danh, và các thiết bị ẩn danh không bao giờ kết nối trực tiếp.",
+      "other": "Không thể thiết lập kết nối."
+    },
+    "relay_standing": {
+      "peer_relay_in_use": "Một người khác trong cuộc gọi đang chuyển tiếp nó.",
+      "none_available": "Không ai trong cuộc gọi đề nghị chuyển tiếp nó.",
+      "refused_by_policy": "Chỉ một máy chủ công khai của CIRIS mới có thể chuyển tiếp nó, nhưng các máy chủ công khai của CIRIS không bao giờ chuyển tiếp cuộc gọi."
+    }
   },
   "decisions": {
     "not_found": "Quyết định đó không còn mở cho bạn nữa.",

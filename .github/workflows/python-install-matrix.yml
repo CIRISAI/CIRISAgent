@@ -84,6 +84,9 @@ jobs:
           EOF
       - name: The upgrade command names this interpreter
         shell: bash
+        env:
+          # Only --help runs; no agent starts. Declared so the run-kind gate stays exact.
+          CIRIS_TRACE_RUN_KIND: qa
         run: |
           # `ciris-agent upgrade` is the supported upgrade path; its module form is
           # what /v1/system/health hands a client (install.upgrade_argv).

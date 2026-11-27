@@ -12,6 +12,7 @@ a half-installed agent that dies at import.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -56,6 +57,25 @@ def say(log: str, text: str) -> None:
         out.write(f"[upgrade {time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
 
 
+def pip_install_argv(python: str, requirement: str, log: str) -> List[str]:
+    """The install command for ``python``'s environment.
+
+    ``python -m pip`` where that environment has pip (pip, pipx). A ``uv tool``
+    environment has no pip, so there it is ``uv pip install --python``, which
+    installs into the same environment.
+    """
+    has_pip = subprocess.run(
+        [python, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    ).returncode == 0
+    if not has_pip:
+        uv = shutil.which("uv")
+        if uv:
+            say(log, "no pip in this environment; using uv")
+            return [uv, "pip", "install", "--python", python, "--upgrade", requirement]
+        say(log, "no pip in this environment and no uv on PATH; trying pip anyway")
+    return [python, "-m", "pip", "install", "--upgrade", requirement]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--python", required=True)
@@ -70,7 +90,7 @@ def main() -> int:
     if not wait_for_exit(args.wait_pid, 30.0):
         say(args.log, "it did not exit; not upgrading over a running CIRIS")
         return 1
-    rc = run([args.python, "-m", "pip", "install", "--upgrade", args.requirement], args.log)
+    rc = run(pip_install_argv(args.python, args.requirement, args.log), args.log)
     say(args.log, f"pip exited {rc}")
     # Clears any ~iris* leftovers from an earlier failed upgrade (ciris-server >= 0.5.245).
     run([args.python, "-m", "ciris_server.upgrade", "--repair"], args.log)

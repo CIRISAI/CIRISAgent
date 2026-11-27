@@ -34,6 +34,7 @@ from .helpers import (
 )
 from .schemas import (
     FederationAddressResponse,
+    InstallInfo,
     StartupStatusResponse,
     SystemHealthResponse,
     SystemTimeResponse,
@@ -855,6 +856,34 @@ async def collect_system_warnings(request: Request, can_manage: bool = True) -> 
     return not has_working_llm, warnings
 
 
+def collect_install_info(signed_in: bool) -> Optional[InstallInfo]:
+    """Describe the answering install. Paths and commands only for a signed-in caller."""
+    import platform
+    from importlib import metadata
+
+    def _dist(name: str) -> Optional[str]:
+        try:
+            return metadata.version(name)
+        except Exception:  # noqa: BLE001 - a missing or unreadable dist is null, not an error
+            return None
+
+    try:
+        from ciris_engine.upgrade import console_python, upgrade_argv, upgrade_command
+
+        return InstallInfo(
+            agent_version=CIRIS_VERSION,
+            server_version=_dist("ciris-server"),
+            client_version=_dist("ciris-client"),
+            python_version=platform.python_version(),
+            python_executable=console_python() if signed_in else None,
+            upgrade_argv=upgrade_argv() if signed_in else None,
+            upgrade_command=upgrade_command() if signed_in else None,
+        )
+    except Exception as exc:  # noqa: BLE001 - health must answer even if this cannot
+        logger.warning("[HEALTH] install info unavailable: %s", type(exc).__name__)
+        return None
+
+
 @router.get("/health")
 async def get_system_health(
     request: Request, auth: Optional[AuthContext] = Depends(_identify_caller)
@@ -969,6 +998,7 @@ async def get_system_health(
         degraded_mode=degraded_mode,
         agent_capabilities=agent_capabilities,
         agent=node_fold_state,
+        install=collect_install_info(signed_in=auth is not None),
     )
 
     return SuccessResponse(data=response)

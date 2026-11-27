@@ -1,0 +1,124 @@
+name: Desktop Payload
+
+# The agent's half of the per-OS installers: a relocatable Python
+# (python-build-standalone, pinned in installers/payload/python.json) with the
+# agent, server and client from a hash-locked payload.lock, plus Java 17 at
+# <prefix>/jre on desktop targets. tools/dev/build_desktop_payload.py does the
+# work; this file is the one build path for every caller:
+#   - build.yml (in-repo, every push/PR/tag; the tag run attaches the files to the release);
+#   - ciris-server's installer workflow, cross-repo, with no token (this repo is public):
+#       uses: CIRISAI/CIRISAgent/.github/workflows/desktop-payload.yml@<ref>
+#       with: { agent_ref: <same ref> }
+#     agent_ref is required there: a called workflow's github.sha is the caller's commit.
+# Artifacts: desktop-payload-<target>, each holding
+# ciris-payload-<ver>-<target>.{tar.zst,payload.json,payload.lock,SHA256SUMS}.
+# linux-aarch64 is headless (no aarch64 desktop client). Unsigned for now (Eric, 2026-11-27).
+
+on:
+  workflow_call:
+    inputs:
+      agent_ref:
+        description: 'CIRISAgent branch, tag or SHA to build (required when called from another repository)'
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+    inputs:
+      agent_ref:
+        description: "CIRISAgent branch, tag or SHA to build (default: this run's commit)"
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    name: Desktop Payload (${{ matrix.target }})
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            os: windows-latest
+          - target: macos-arm64
+            os: macos-15
+          - target: macos-x86_64
+            os: macos-15-intel
+          - target: linux-x86_64
+            os: ubuntu-latest
+          - target: linux-aarch64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: A cross-repo caller must name the agent commit
+        if: github.repository != 'CIRISAI/CIRISAgent' && inputs.agent_ref == ''
+        shell: bash
+        run: |
+          echo "::error::pass agent_ref (a CIRISAgent branch, tag or SHA): in a called workflow github.sha is the caller's commit"
+          exit 1
+
+      - uses: actions/checkout@v5
+        with:
+          repository: CIRISAI/CIRISAgent
+          ref: ${{ inputs.agent_ref || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        shell: bash
+        run: python -m pip install --upgrade pip build wheel uv==0.13.8 zstandard==0.25.0
+
+      - name: Set up a JDK 17 for the payload's jre/ (desktop targets)
+        # Liberica, as for the old Windows installer: Temurin 17 dropped Windows 7.
+        if: matrix.target != 'linux-aarch64'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: '17'
+
+      - name: Vendor this target's desktop JAR from the client wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f ciris_engine/desktop_app/*.jar
+          PLATFORM=$(python -c "import json, os; print(json.load(open('installers/payload/python.json'))['targets'][os.environ['TARGET']]['client_platform'] or '')")
+          if [ -z "$PLATFORM" ]; then
+            echo "$TARGET is headless: no desktop JAR"
+            exit 0
+          fi
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps --only-binary=:all: --platform "$PLATFORM" -d "$RUNNER_TEMP/clientwheel"
+          python tools/dev/vendor_desktop_jar.py "$RUNNER_TEMP/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
+
+      - name: Build the agent wheel for this target
+        shell: bash
+        run: python -m build --wheel --outdir "$RUNNER_TEMP/agentwheel"
+
+      - name: Stage the payload
+        shell: bash
+        run: python tools/dev/build_desktop_payload.py stage --target "$TARGET" --wheel "$RUNNER_TEMP/agentwheel" --out dist-payload
+
+      - name: The payload runs from another prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for a in dist-payload/*.tar.zst; do python tools/dev/build_desktop_payload.py smoke "$a"; done
+          cat dist-payload/*.payload.json
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: desktop-payload-${{ matrix.target }}
+          path: dist-payload/*
+          retention-days: 30
+

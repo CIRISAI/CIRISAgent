@@ -45,6 +45,10 @@ STOP_DEADLINE_SECS = 15.0
 _TILDE_GLOB = "~iris*"
 _STOP_FLAG = "stop_for_upgrade"
 _RUNNING_FILE = "ciris-agent.json"
+#: The systemd --user unit the Linux per-user installer runs CIRIS as (agreed with
+#: ciris-server 2026-11-27). Override for another unit name.
+SYSTEMD_UNIT_ENV = "CIRIS_SYSTEMD_UNIT"
+DEFAULT_SYSTEMD_UNIT = "ciris.service"
 
 
 def run_dir(home: Path) -> Path:
@@ -65,9 +69,45 @@ def register_running(home: Path, argv: List[str]) -> None:
     try:
         run_dir(home).mkdir(parents=True, exist_ok=True)
         stop_flag(home).unlink(missing_ok=True)  # Left by an upgrade that didn't finish.
-        (run_dir(home) / _RUNNING_FILE).write_text(json.dumps({"pid": os.getpid(), "argv": argv}), encoding="utf-8")
+        state: Dict[str, object] = {"pid": os.getpid(), "argv": argv}
+        unit = _supervising_unit()
+        if unit:
+            state["systemd_unit"] = unit
+        (run_dir(home) / _RUNNING_FILE).write_text(json.dumps(state), encoding="utf-8")
     except OSError as e:
         logger.warning("could not record the running process: %s", e)
+
+
+def _supervising_unit() -> Optional[str]:
+    """The systemd --user unit running this process, if systemd started it.
+
+    systemd sets INVOCATION_ID for every unit it starts. The unit name is not in
+    the environment, so it is the installer's (CIRIS_SYSTEMD_UNIT, default
+    ciris.service); run_upgrade checks it against the unit's MainPID before
+    trusting it.
+    """
+    if not sys.platform.startswith("linux") or not os.environ.get("INVOCATION_ID"):
+        return None
+    return os.environ.get(SYSTEMD_UNIT_ENV) or DEFAULT_SYSTEMD_UNIT
+
+
+def _unit_main_pid(unit: str) -> Optional[int]:
+    try:
+        out = subprocess.run(
+            ["systemctl", "--user", "show", "-p", "MainPID", "--value", unit],
+            capture_output=True, text=True, timeout=10, check=False,
+        ).stdout.strip()  # fmt: skip
+        return int(out) if out.isdigit() and int(out) > 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def supervised_unit(running: Dict[str, object]) -> Optional[str]:
+    """The user unit that supervises the recorded process, only if systemd agrees."""
+    unit = running.get("systemd_unit")
+    if not isinstance(unit, str) or not unit or shutil.which("systemctl") is None or shutil.which("systemd-run") is None:
+        return None
+    return unit if _unit_main_pid(unit) == running.get("pid") else None
 
 
 def read_running(home: Path) -> Optional[Dict[str, object]]:
@@ -191,8 +231,19 @@ def _requirement(version: Optional[str]) -> str:
     return f"ciris-agent=={version}" if version else "ciris-agent"
 
 
-def _start_helper(home: Path, requirement: str, relaunch: Optional[List[str]]) -> Path:
-    """Copy the helper out of the install and start it detached. Returns its log."""
+def _start_helper(
+    home: Path,
+    requirement: str,
+    relaunch: Optional[List[str]],
+    wait_pid: Optional[int] = None,
+    outside_unit: Optional[str] = None,
+) -> Path:
+    """Copy the helper out of the install and start it detached. Returns its log.
+
+    With ``outside_unit``, the helper runs in its own transient user unit
+    (systemd-run): stopping a unit ends every process in it, including this
+    command when the app's Upgrade button started it from inside the unit.
+    """
     logs = home / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log = logs / "upgrade.log"
@@ -207,7 +258,7 @@ def _start_helper(home: Path, requirement: str, relaunch: Optional[List[str]]) -
         "--requirement",
         requirement,
         "--wait-pid",
-        str(os.getpid()),
+        str(wait_pid or os.getpid()),
         "--log",
         str(log),
         "--stop-flag",
@@ -215,6 +266,9 @@ def _start_helper(home: Path, requirement: str, relaunch: Optional[List[str]]) -
     ]
     if relaunch:
         cmd += ["--relaunch", json.dumps(relaunch)]
+    if outside_unit:
+        stem = outside_unit.removesuffix(".service")
+        cmd = ["systemd-run", "--user", "--collect", "--quiet", f"--unit={stem}-upgrade-{os.getpid()}", "--", *cmd]
     kwargs: Dict[str, object] = {"start_new_session": True}
     if sys.platform == "win32":
         kwargs = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -235,6 +289,18 @@ def run_upgrade(argv: List[str], home: Optional[Path] = None) -> int:
 
     running = read_running(home)
     relaunch: Optional[List[str]] = None
+    unit = supervised_unit(running) if running else None
+    if running and unit:
+        # systemd owns this process: it must stop and start it, or Restart= and the
+        # helper's own relaunch would race pip (ciris-server's Linux installer).
+        pid = int(str(running["pid"]))
+        relaunch = None if args.no_restart else ["systemctl", "--user", "start", unit]
+        log = _start_helper(home, _requirement(args.to), relaunch, wait_pid=pid, outside_unit=unit)
+        print(f"Stopping {unit} (pid {pid}) for the upgrade. Progress: {log}")
+        subprocess.run(["systemctl", "--user", "stop", "--no-block", unit], check=False)
+        if relaunch:
+            print(f"{unit} starts again when the upgrade finishes.")
+        return 0
     if running:
         pid = int(str(running["pid"]))
         print(f"Closing CIRIS (pid {pid})...")

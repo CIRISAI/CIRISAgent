@@ -21,6 +21,8 @@ To ship with the next ciris-server release and ciris-client (pins land on this b
 ### Changed
 
 - **`ciris-agent upgrade` is the documented upgrade path** (README, docs/INSTALLATION.md), with `pipx`/`uv tool` as the recommended install. A bare `pip install -U` can upgrade a different Python's copy.
+- **`ciris-agent upgrade` under systemd hands the stop and start to systemd.** ciris-server's Linux per-user installer runs CIRIS as the user unit `ciris.service` (`CIRIS_SYSTEMD_UNIT` overrides the name). The unit is detected from `INVOCATION_ID` and trusted only when its MainPID is the recorded CIRIS. The helper then runs in its own transient unit (`systemd-run --user`), because stopping a unit ends everything in it, including an upgrade started from the app's own button. It waits for CIRIS to exit, upgrades, and restarts the unit with `systemctl --user start` instead of relaunching outside it. Without this, `Restart=` and the helper's relaunch would race pip.
+- **The desktop payload build is a reusable workflow** (`.github/workflows/desktop-payload.yml`, `workflow_call` with `agent_ref`). build.yml calls it, and ciris-server's installer workflow calls it cross-repo with no token.
 - **`ciris-agent upgrade` works in `uv tool` environments**, which have no pip: the helper falls back to `uv pip install --python`.
 - **The Python install check also runs Python 3.10** (the `python_requires` floor) and checks that `python -m ciris_engine.cli upgrade` resolves to the interpreter it runs on, on Linux and Windows. It now also runs when the upgrade code changes.
 

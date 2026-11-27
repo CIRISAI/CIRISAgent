@@ -420,3 +420,76 @@ def test_the_jars_sha256sums_travels_with_them(tmp_path: Path) -> None:
         (jars / "SHA256SUMS").write_text("bbbb  ffmpeg.jar\n")  # same size, new content
         desktop_launcher._with_class_path(installed, private)
     assert copied.read_text() == "bbbb  ffmpeg.jar\n"
+
+
+# --- systemd --user (ciris-server's Linux per-user installer runs CIRIS as ciris.service) ---
+
+
+def test_a_systemd_started_process_records_its_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(upgrade.sys, "platform", "linux")
+    monkeypatch.setenv("INVOCATION_ID", "abc")
+    monkeypatch.delenv("CIRIS_SYSTEMD_UNIT", raising=False)
+    upgrade.register_running(tmp_path, ["x"])
+    state = json.loads((upgrade.run_dir(tmp_path) / "ciris-agent.json").read_text())
+    assert state["systemd_unit"] == "ciris.service"
+
+
+def test_without_systemd_no_unit_is_recorded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    upgrade.register_running(tmp_path, ["x"])
+    assert "systemd_unit" not in json.loads((upgrade.run_dir(tmp_path) / "ciris-agent.json").read_text())
+
+
+def _supervised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, main_pid: int) -> None:
+    monkeypatch.setattr(upgrade.sys, "platform", "linux")
+    monkeypatch.setenv("INVOCATION_ID", "abc")
+    upgrade.register_running(tmp_path, ["python", "-m", "ciris_engine.cli", "--adapter", "api"])
+    monkeypatch.setattr(upgrade.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(upgrade, "_unit_main_pid", lambda unit: main_pid)
+
+
+def test_under_systemd_the_unit_is_stopped_and_started_by_systemd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    _supervised(tmp_path, monkeypatch, main_pid=os.getpid())
+    calls: list = []
+    monkeypatch.setattr(upgrade.subprocess, "run", lambda argv, **kw: calls.append(argv))
+    with patch.object(upgrade, "_start_helper", return_value=tmp_path / "u.log") as helper:
+        assert upgrade.run_upgrade([], home=tmp_path) == 0
+    # The helper waits for CIRIS's pid, restarts through systemctl, and runs outside the unit.
+    args, kwargs = helper.call_args
+    assert args[2] == ["systemctl", "--user", "start", "ciris.service"]
+    assert kwargs == {"wait_pid": os.getpid(), "outside_unit": "ciris.service"}
+    assert ["systemctl", "--user", "stop", "--no-block", "ciris.service"] in calls
+    assert not upgrade.stop_flag(tmp_path).exists(), "systemd stops it; no stop flag, no kill"
+
+
+def test_under_systemd_no_restart_leaves_the_unit_stopped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    _supervised(tmp_path, monkeypatch, main_pid=os.getpid())
+    monkeypatch.setattr(upgrade.subprocess, "run", lambda argv, **kw: None)
+    with patch.object(upgrade, "_start_helper", return_value=tmp_path / "u.log") as helper:
+        upgrade.run_upgrade(["--no-restart"], home=tmp_path)
+    assert helper.call_args.args[2] is None
+
+
+def test_a_unit_that_does_not_run_this_pid_is_not_trusted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Negative: INVOCATION_ID from some other unit falls back to the ordinary stop."""
+    _supervised(tmp_path, monkeypatch, main_pid=1)
+    with (
+        patch.object(upgrade, "_wait_gone", return_value=True),
+        patch.object(upgrade, "_start_helper", return_value=tmp_path / "u.log") as helper,
+    ):
+        upgrade.run_upgrade([], home=tmp_path)
+    assert upgrade.stop_flag(tmp_path).exists()
+    assert helper.call_args.kwargs == {}
+
+
+def test_the_helper_leaves_the_unit_through_systemd_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    started: list = []
+    monkeypatch.setattr(upgrade.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
+    upgrade._start_helper(tmp_path, "ciris-agent", ["systemctl", "--user", "start", "ciris.service"], wait_pid=4242, outside_unit="ciris.service")
+    cmd = started[0]
+    assert cmd[:4] == ["systemd-run", "--user", "--collect", "--quiet"] and cmd[4].startswith("--unit=ciris-upgrade-")
+    assert cmd[cmd.index("--wait-pid") + 1] == "4242"

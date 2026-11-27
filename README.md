@@ -60,10 +60,20 @@ Ratchet](https://doi.org/10.5281/zenodo.18142668) paper.
 ## Run it yourself
 
 ```bash
-pip install ciris-agent
+pipx install ciris-agent          # or: pip install ciris-agent
 ciris-agent                       # desktop app + local API server
 ciris-agent --adapter discord     # or run it as a Discord bot
 ```
+
+`pipx` (or `uv tool install ciris-agent`) keeps CIRIS in one environment of its
+own, so it is never split across two Pythons.
+
+**To upgrade, run `ciris-agent upgrade`**, not `pip install -U`. It closes CIRIS
+first (Windows can't replace files that are in use) and upgrades the Python
+that CIRIS actually runs from. With more than one Python installed, a bare
+`pip install -U` can upgrade a different copy and leave the one you start
+unchanged. Signed in, `GET /v1/system/health` reports the Python CIRIS runs
+from and the exact upgrade command for it (`install.upgrade_command`).
 
 Server install (agent + web UI) — download, optionally inspect, then run:
 

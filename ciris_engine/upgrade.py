@@ -158,6 +158,35 @@ def _end_process_tree(pid: int, deadline_secs: float) -> None:
             pass
 
 
+def console_python(executable: Optional[str] = None) -> str:
+    """The console Python beside ``executable``: ``pythonw.exe`` prints nowhere.
+
+    The Windows hand-off can leave CIRIS running under pythonw; an upgrade typed
+    or started from it would run with no visible output.
+    """
+    exe = Path(executable or sys.executable)
+    if exe.name.lower() == "pythonw.exe":
+        candidate = exe.with_name("python.exe")
+        if candidate.exists():
+            return str(candidate)
+    return str(exe)
+
+
+def upgrade_argv(executable: Optional[str] = None) -> List[str]:
+    """Argv that upgrades THIS install: its own Python, never whatever is first on PATH."""
+    return [console_python(executable), "-m", "ciris_engine.cli", "upgrade"]
+
+
+def upgrade_command(executable: Optional[str] = None, platform: Optional[str] = None) -> str:
+    """``upgrade_argv`` as text for the platform's usual shell (PowerShell on Windows)."""
+    argv = upgrade_argv(executable)
+    if (platform or sys.platform) == "win32":
+        return f'& "{argv[0]}" ' + " ".join(argv[1:])
+    import shlex
+
+    return shlex.join(argv)
+
+
 def _requirement(version: Optional[str]) -> str:
     return f"ciris-agent=={version}" if version else "ciris-agent"
 

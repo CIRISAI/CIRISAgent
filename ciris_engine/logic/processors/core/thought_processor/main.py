@@ -2072,6 +2072,15 @@ class ThoughtProcessor(
         # Keep the retry's vetoes with the result the thought ends on.
         original_conscience_result.veto_record = retry_conscience_result.veto_record or original_conscience_result.veto_record
 
+        # A DEFER is never blocked (Eric, 2026-11-27). The retry pass can end in
+        # one the depth guardrail forced; falling through to the first pass's
+        # PONDER below discarded it (RATCHET TLA+ F6), and the thought kept
+        # pondering past the depth limit.
+        if retry_conscience_result.final_action.selected_action == HandlerActionType.DEFER:
+            retry_conscience_result.veto_record = original_conscience_result.veto_record
+            logger.info("ThoughtProcessor: Retry pass ended in DEFER for %s; deferring", thought.thought_id)
+            return retry_conscience_result.final_action, retry_conscience_result
+
         # Check for benchmark mode bouncing
         from ciris_engine.logic.config.env_utils import get_env_var
 

@@ -117,3 +117,76 @@ async def test_a_vetoed_speak_is_still_overridden() -> None:
 @pytest.mark.parametrize("answer", [None, "", "nonsense", 7])
 def test_an_unreadable_objection_type_is_justification(answer: Optional[object]) -> None:
     assert coerce_objection_type(answer) == ObjectionType.JUSTIFICATION
+
+
+# --- F6 (RATCHET TLA+): the retry pass's DEFER is not replaced by the first pass's PONDER ---
+
+
+def _cr(original: ActionSelectionDMAResult, final: ActionSelectionDMAResult, overridden: bool = True) -> Any:
+    from ciris_engine.schemas.conscience.core import EpistemicData
+    from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+    return ConscienceApplicationResult(
+        original_action=original,
+        final_action=final,
+        overridden=overridden,
+        override_reason="test",
+        epistemic_data=EpistemicData(
+            entropy_level=0.1, coherence_level=0.9, uncertainty_acknowledged=True, reasoning_transparency=1.0
+        ),
+    )
+
+
+def _ponder() -> ActionSelectionDMAResult:
+    from ciris_engine.schemas.actions.parameters import PonderParams
+
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.PONDER,
+        action_parameters=PonderParams(questions=["why?"]),
+        rationale="ponder",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("benchmark", [False, True], ids=["normal", "benchmark"])
+async def test_a_retry_pass_that_ends_in_defer_defers(benchmark: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The depth guardrail can force DEFER on the retry pass. That DEFER ends the thought."""
+    from unittest.mock import AsyncMock
+
+    from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
+
+    if benchmark:
+        monkeypatch.setenv("CIRIS_BENCHMARK_MODE", "true")
+        monkeypatch.setenv("CIRIS_TEMPLATE", "he-300-benchmark")
+    retry = _speak()
+    forced = _defer("Maximum thought depth reached.")
+    proc = ThoughtProcessor.__new__(ThoughtProcessor)
+    proc._conscience_execution_step = AsyncMock(return_value=_cr(retry, forced))  # type: ignore[method-assign]
+    original = _cr(_speak(), _ponder())
+    item = SimpleNamespace(thought_id="th1", source_task_id="task1", conscience_feedback=None, deadline=None)
+    thought = SimpleNamespace(thought_id="th1", source_task_id="task1")
+
+    action, result = await proc._process_conscience_retry_result(item, thought, None, SimpleNamespace(), retry, original)
+
+    assert action.selected_action == HandlerActionType.DEFER
+    assert result.final_action.selected_action == HandlerActionType.DEFER
+
+
+@pytest.mark.asyncio
+async def test_a_retry_pass_that_ends_in_ponder_still_ponders() -> None:
+    """Negative control: the fall-through is unchanged for a vetoed retry that is not a DEFER."""
+    from unittest.mock import AsyncMock
+
+    from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
+
+    retry = _speak()
+    proc = ThoughtProcessor.__new__(ThoughtProcessor)
+    proc._conscience_execution_step = AsyncMock(return_value=_cr(retry, _ponder()))  # type: ignore[method-assign]
+    original = _cr(_speak(), _ponder())
+    item = SimpleNamespace(thought_id="th1", source_task_id="task1", conscience_feedback=None, deadline=None)
+    thought = SimpleNamespace(thought_id="th1", source_task_id="task1")
+
+    _, result = await proc._process_conscience_retry_result(item, thought, None, SimpleNamespace(), retry, original)
+
+    assert result is original
+    assert result.final_action.selected_action == HandlerActionType.PONDER

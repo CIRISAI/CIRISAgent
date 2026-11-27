@@ -28,6 +28,7 @@ To ship with the next ciris-server release and ciris-client (pins land on this b
   - The ban never matches a DEFER: the conscience pass skips the ban check for it, and `banned_entry_for` refuses `defer:` keys.
   - A conscience veto no longer overrides a DEFER. The consciences still review it (the 2026-05-03 check for a dodge dressed as a refusal), and their objections ride to the Wise Authority in the deferral's context as `conscience_objections`. A veto of a DEFER is not recorded as a ban.
   - A conscience retry no longer forces a passing DEFER into PONDER.
+  - A retry pass that ends in DEFER (the depth guardrail's) now defers. It used to fall back to the first pass's PONDER (RATCHET's TLA+ model of H3ERE, finding F6).
 - **A guidance task does not inherit the deferred task's vetoes.** The Wise Authority's resolution is the overrule the deferral asked for. The context copy already dropped the old grant and envelope; it now drops the veto record too.
 - **An objection the conscience can't classify is "justification", not "substantive".** A conscience that can't say what is wrong cannot know the action was wrong, and only a substantive objection bans for good. Changed in the response schema default, the parser's fallback and the untyped-veto fold, and in the four English conscience prompts ("substantive" only when it can name what is wrong). The localized conscience prompts never asked for an objection type, so they already fall to the default.
 

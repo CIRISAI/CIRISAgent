@@ -21,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.23.4</string>
+	<string>2.24.0</string>
 	<key>CFBundleVersion</key>
 	<string>390</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

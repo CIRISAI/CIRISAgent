@@ -141,7 +141,7 @@ class SystemHealthResponse(BaseModel):
         None,
         description=(
             "Which install is answering and how to upgrade it. The key is absent on agents older than "
-            "2.23.4. Null only if the install could not describe itself."
+            "2.24.0. Null only if the install could not describe itself."
         ),
     )
 

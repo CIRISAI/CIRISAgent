@@ -5,7 +5,9 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.23.4-stable] - 2026-11-27
+## [2.24.0-stable] - Unreleased
+
+To ship with the next ciris-server release and ciris-client (pins land on this branch when they are tagged), the H3ERE fixes RATCHET's TLA+ model confirms, and the installer work.
 
 ### Added
 

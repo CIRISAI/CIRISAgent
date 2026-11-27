@@ -145,7 +145,7 @@ pipx install ciris-agent
 
 ```bash
 ciris-agent upgrade              # latest
-ciris-agent upgrade --to 2.23.4  # a specific version
+ciris-agent upgrade --to 2.24.0  # a specific version
 ```
 
 Use this instead of `pip install -U ciris-agent`. It closes a running CIRIS

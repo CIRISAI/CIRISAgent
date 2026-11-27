@@ -193,11 +193,16 @@ def _with_class_path(installed: Path, private: Path) -> Path:
     """
     if private == installed:
         return private
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    home = get_ciris_home().resolve()
     for entry in manifest_class_path(installed):
         source = (installed.parent / entry).resolve()
         if not source.is_file():
             continue
         target = private.parent / entry
+        if not target.resolve().is_relative_to(home):
+            continue  # never write outside CIRIS_HOME, whatever the manifest names
         try:
             _copy_if_changed(source, target)
         except OSError as e:

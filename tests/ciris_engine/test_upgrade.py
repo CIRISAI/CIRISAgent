@@ -344,7 +344,8 @@ def test_the_private_copy_brings_its_class_path_along(tmp_path: Path) -> None:
     private = tmp_path / "home" / "runtime" / "desktop" / installed.name
     private.parent.mkdir(parents=True)
     private.write_bytes(installed.read_bytes())
-    assert desktop_launcher._with_class_path(installed, private) == private
+    with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=tmp_path / "home"):
+        assert desktop_launcher._with_class_path(installed, private) == private
     # Resolved from the COPY's directory, exactly as the JVM will.
     assert (private.parent / entry).resolve().read_bytes() == b"ffmpeg"
     assert (tmp_path / "home" / "ciris_holon" / "media" / "jars" / "ffmpeg-7.1-1.5.11-linux-x86_64.jar").exists()
@@ -363,3 +364,38 @@ def test_the_installed_client_jar_parses_if_present() -> None:
         pytest.skip("no desktop JAR installed here")
     for entry in desktop_launcher.manifest_class_path(jar):
         assert not entry.startswith("/") and not entry.startswith("file:")
+
+
+def test_class_path_copies_never_leave_ciris_home(tmp_path: Path) -> None:
+    site = tmp_path / "site"
+    installed = site / "a" / "b" / "c" / "d" / "CIRIS.jar"
+    escape = "../../../outside.jar"  # source: site/a/outside.jar; target: tmp_path/outside.jar
+    _jar_with_class_path(installed, [escape])
+    (site / "a").mkdir(parents=True, exist_ok=True)
+    (site / "a" / "outside.jar").write_bytes(b"x")
+    private = tmp_path / "home" / "runtime" / "desktop" / "CIRIS.jar"
+    private.parent.mkdir(parents=True)
+    private.write_bytes(b"jar")
+    with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=tmp_path / "home"):
+        desktop_launcher._with_class_path(installed, private)
+    assert (private.parent / escape).resolve() == (tmp_path / "outside.jar").resolve()
+    assert not (tmp_path / "outside.jar").exists()
+
+
+def test_a_current_class_path_copy_is_not_rewritten(tmp_path: Path) -> None:
+    site = tmp_path / "site-packages"
+    installed = site / "ciris_engine" / "desktop_app" / "CIRIS.jar"
+    entry = "../../ciris_holon/media/jars/ffmpeg.jar"
+    _jar_with_class_path(installed, [entry])
+    (site / "ciris_holon" / "media" / "jars").mkdir(parents=True)
+    (site / "ciris_holon" / "media" / "jars" / "ffmpeg.jar").write_bytes(b"ffmpeg")
+    private = tmp_path / "home" / "runtime" / "desktop" / "CIRIS.jar"
+    private.parent.mkdir(parents=True)
+    private.write_bytes(b"jar")
+    with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=tmp_path / "home"):
+        desktop_launcher._with_class_path(installed, private)
+        copied = (private.parent / entry).resolve()
+        before = copied.stat().st_mtime_ns
+        with patch.object(desktop_launcher.shutil, "copyfile", side_effect=AssertionError("rewrote a current file")):
+            desktop_launcher._with_class_path(installed, private)
+    assert copied.stat().st_mtime_ns == before

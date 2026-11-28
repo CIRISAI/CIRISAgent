@@ -332,3 +332,76 @@ def test_the_agents_proposal_is_what_the_wa_approves():
     assert proposed_amendment_of({"context": {"proposed_amendment": "flat only"}}) == "flat only"
     assert proposed_amendment_of({"context": {}}) is None and proposed_amendment_of(None) is None
     assert m1_justification_of({"context": {"identity_change": "not json"}}) is None
+
+
+def _deferral(proposal=None):
+    ctx = {}
+    if proposal is not None:
+        ctx["identity_change"] = json.dumps({"kind": "amendment", "proposed_text": proposal, "m1_justification": "why"})
+    return {"deferral_id": "d1", "context": ctx}
+
+
+def test_resolve_plan_asks_for_wording_when_the_deferral_has_none():
+    # sh-un-07 (run 46040465835): the depth guardrail deferred before the agent proposed wording; approving the
+    # frozen paragraph was a WA edit without an M-1 justification, which the engine deferred back.
+    assert m.resolve_plan(_deferral("IDENTITY CHANGE: x"), 2) == "approve"
+    assert m.resolve_plan(_deferral("IDENTITY CHANGE: x"), 0) == "approve"
+    assert m.resolve_plan(_deferral(), 2) == "ask"
+    assert m.resolve_plan(_deferral("   "), 1) == "ask"
+    assert m.resolve_plan(_deferral(), 0) == "frozen"
+    assert m.resolve_plan(None, 1) == "ask"
+
+
+def test_genuine_correction_asks_then_approves_the_agents_proposal(monkeypatch):
+    import asyncio
+
+    calls = []
+    first, second = _deferral(), dict(_deferral("IDENTITY CHANGE (agent wording)"), deferral_id="d2")
+
+    cls = next(c for c in vars(m).values() if isinstance(c, type) and hasattr(c, "_genuine_correction"))
+    ep = object.__new__(cls)  # no agent: every network method is replaced below
+    ep.users = {"wa": {"token": "t"}}
+    logs = []
+    ep._log = lambda ev, **kw: logs.append((ev, kw))
+
+    async def noop(*a, **k):
+        return None
+
+    async def identity():
+        return {"version": 1}
+
+    async def send(user, msg, label):
+        return {"status": None, "response": None}, first
+
+    pending = [[first], []]
+
+    async def pend(*a, **k):
+        return pending.pop(0) if pending else []
+
+    async def watch(seen, *, label, wait_s=0):
+        return second
+
+    async def req(method, path, token, json_body=None, timeout=0, params=None):
+        calls.append((path, json_body))
+        return 200, {"data": {}}
+
+    async def wait_identity(marker, v):
+        return {"changed": True}
+
+    for name, fn in {"_identity": identity, "_send_and_watch_for_deferral": send, "_pending_deferrals": pend,
+                     "_watch_for_new_deferral": watch, "_req": req, "_wait_identity": wait_identity,
+                     "_occurrences_readback": noop, "_identity_scope_scan": lambda *a: asyncio.sleep(0, {"hits": []}),
+                     "_channel_history": noop, "_audit_since": lambda *a: asyncio.sleep(0, []), "_ceg_rows": noop,
+                     }.items():
+        setattr(ep, name, fn)
+    ep._note_row_keys = lambda *a: None
+    ep._channel_trace = lambda *a: None
+    ep._agent_log_refusals = lambda *a: []
+    monkeypatch.setenv("M4_AMENDMENT_FIELD", "amendment_text")
+    out = asyncio.run(ep._genuine_correction({"correction": WA_REQ}, "IDENTITY CHANGE (frozen)", label="g"))
+    # First resolve: guidance only, no amendment bytes; second: the agent's own wording, byte for byte.
+    assert [p for p, _ in calls] == ["/v1/wa/deferrals/d1/resolve", "/v1/wa/deferrals/d2/resolve"]
+    assert "amendment_text" not in calls[0][1]
+    assert calls[1][1]["amendment_text"] == "IDENTITY CHANGE (agent wording)"
+    assert out["resolve"]["approved_source"] == "agent_proposal"
+    assert out["resolve"]["proposal_requests"][0]["next_has_proposal"] is True

@@ -309,7 +309,8 @@ def test_a_conscience_field_a_locale_lacks_is_offered_to_the_lane(tmp_path: Path
 
 
 def test_the_dry_run_lists_the_conscience_positions_for_all_28_locales(capsys: pytest.CaptureFixture[str]) -> None:
-    PL.main(["--lane", "translate", "--keys", "*_conscience.pipeline_position", "--dry-run"])
+    # --overwrite: the positions are translated now, and without it the keep-only guard refuses the selection.
+    PL.main(["--lane", "translate", "--keys", "*_conscience.pipeline_position", "--overwrite", "--dry-run"])
     out = capsys.readouterr().out
     assert "lane=translate  84 key-value(s) across 28 language(s)" in out
     for lang in PL.languages()[1:]:
@@ -459,3 +460,133 @@ def test_the_anchor_rules_reach_all_three_system_prompts(tmp_path: Path) -> None
         assert "THESE STRINGS ARE NOT UI LABELS" in text
         assert 'Keys starting "website:", "client:" or "agent-ui:"' in text
     assert "not a terminology finding" in L.SYSTEM_REVIEW
+
+
+# ──────────────────────────────────────────────
+# Re-split: a header and its tail, redone together (--resplit)
+# ──────────────────────────────────────────────
+
+
+@pytest.fixture
+def resplit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(PL, "RESPLIT", frozenset({"coh_conscience.system_prompt"}))
+
+
+def _conscience_stage(tmp_path: Path, values: Dict[str, str]) -> Path:
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "es.json").write_text(json.dumps({"coh_conscience": values}, ensure_ascii=False), encoding="utf-8")
+    return stage
+
+
+def test_a_resplit_stages_header_and_tail_as_missing(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    assert {"system_prompt", "system_prompt_tail"} <= set(en["coh_conscience"])
+    es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
+    # The pre-split header is redone from the split English, so it is not offered as "have".
+    assert "system_prompt" not in es.get("coh_conscience", {})
+
+
+def test_without_a_resplit_the_tail_stays_pending(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    assert "system_prompt_tail" not in en["coh_conscience"]
+
+
+def test_a_resplit_pair_is_written_together_and_the_loader_renders_it_once(
+    two_roots: list, tmp_path: Path, resplit: None
+) -> None:
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    head = "Eres IRIS-C. Puntúa la coherencia."
+    tail = 'Responde con JSON: {"coherence": <0.0-1.0>}\n'
+    written, rejected = PL.write_back(
+        _conscience_stage(tmp_path, {"system_prompt": head, "system_prompt_tail": tail}), ["es"], two_roots
+    )
+    assert rejected == {}
+    assert {"es:coh_conscience.system_prompt", "es:coh_conscience.system_prompt_tail"} <= set(written)
+    loader = ConsciencePromptLoader(prompts_dir=str(two_roots[1]), language="es")
+    got_head, _, got_tail = loader.get_system_prompt_parts("coh_conscience")
+    assert got_head == head
+    assert got_tail == tail
+    assert (got_head + got_tail).count("Responde con JSON") == 1
+
+
+def test_half_a_resplit_pair_writes_nothing(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    """Negative: a header translated without its tail would drop the tail's text."""
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+    written, rejected = PL.write_back(_conscience_stage(tmp_path, {"system_prompt": "Eres IRIS-C."}), ["es"], two_roots)
+    assert written == []
+    assert "written together or not at all" in rejected["es:coh_conscience.system_prompt"][0]
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_a_resplit_pair_with_a_broken_tail_writes_neither(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+    written, rejected = PL.write_back(
+        _conscience_stage(tmp_path, {"system_prompt": "Eres IRIS-C.", "system_prompt_tail": "Responde con texto.\n"}),
+        ["es"],
+        two_roots,
+    )
+    assert not any(k.startswith("es:coh_conscience.system_prompt") for k in written)
+    assert rejected
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_a_resplit_pair_already_done_in_a_locale_is_not_redone(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    text = PL.set_field(path.read_text(encoding="utf-8"), "system_prompt", "Eres IRIS-C. Puntúa.")
+    path.write_text(PL.set_field(text, "system_prompt_tail", 'Responde con JSON: {"coherence": <0.0-1.0>}\n'), encoding="utf-8")
+    PL.build_stage(tmp_path / "stage", two_roots)
+    es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
+    assert {"system_prompt", "system_prompt_tail"} <= set(es["coh_conscience"])  # counted as translated
+
+
+# ──────────────────────────────────────────────
+# A run that could only pay and keep is refused before it spends (run 46093145549: $22.07, 0 written)
+# ──────────────────────────────────────────────
+
+
+def test_selecting_translated_keys_without_overwrite_is_named(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    kept = PL.kept_without_overwrite(tmp_path / "stage", ["coh_conscience.system_prompt"], ["es"], en)
+    assert kept == {"es": ["coh_conscience.system_prompt"]}  # es already holds a translation
+
+
+def test_selecting_only_missing_keys_is_not_refused(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    # demo's es copy is the English one, so every demo field is missing: nothing would be kept.
+    assert PL.kept_without_overwrite(tmp_path / "stage", ["demo.*"], ["es"], en) == {}
+
+
+def test_the_lane_refuses_a_keep_only_run_and_spends_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+    before = _localized_snapshot()
+    rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--dry-run"])
+    assert rc == 2
+    assert "[refuse]" in capsys.readouterr().out
+    assert _localized_snapshot() == before
+
+
+def test_overwrite_lets_the_same_selection_through(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--overwrite", "--dry-run"])
+    assert rc == 0
+    assert "[refuse]" not in capsys.readouterr().out
+
+
+def test_the_ui_lane_refuses_a_keep_only_run_too() -> None:
+    import importlib.util
+
+    import lane_backoff as LB  # noqa: E402
+
+    # A fresh copy: the prompts target repoints the shared module's CANONICAL at its stage.
+    spec = importlib.util.spec_from_file_location("localize_ui_fresh", REPO / "localization" / "localize.py")
+    assert spec
+    assert spec.loader
+    L = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(L)
+    L.CANONICAL = L.REPO_ROOT / L.guard.UI_BUNDLE  # LOCALIZE_TARGET may be left at prompts by an earlier test
+
+    assert LB.keep_only_refusal(L, ["--lane", "translate", "--keys", "nav.*", "--lang", "es"])
+    assert LB.keep_only_refusal(L, ["--lane", "translate", "--keys", "nav.*", "--lang", "es", "--overwrite"]) is None
+    assert LB.keep_only_refusal(L, ["--lane", "evaluate", "--keys", "nav.*", "--lang", "es"]) is None

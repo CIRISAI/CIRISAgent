@@ -5,6 +5,37 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.0-stable] - Unreleased
+
+To ship with the next ciris-server release and ciris-client (pins land on this branch when they are tagged), the H3ERE fixes RATCHET's TLA+ model confirms, and the installer work.
+
+### Added
+
+- **`/v1/system/health` reports which install answered** (`install`): the ciris-agent, ciris-server and ciris-client versions and the Python version. A signed-in caller also gets the interpreter path and the exact command that upgrades that install (`upgrade_argv`, plus `upgrade_command` as PowerShell or POSIX shell text). The path is left out for anonymous callers because it contains the OS user name. On 2026-11-27 a Windows user with Python 3.14 and 3.15 upgraded 3.15's copy with `pip install -U` while his shortcut kept starting 3.14's 2.23.1, and nothing showed it. A client can now tell "out of date" from "wrong interpreter" and offer an upgrade that can't hit the wrong Python.
+- **Calls from the agent-launched desktop have video again.** ciris-client 0.5.243 reaches FFmpeg through its manifest `Class-Path` (`../../ciris_holon/media/jars/*`), which the JVM resolves against the JAR's own directory and silently drops when missing. The launcher runs a private copy of the JAR (so Windows pip can replace the installed one), and nothing sat at that relative path. It now copies every relative `Class-Path` file beside the private copy, for both its own copy and ciris-server's `private_jar`.
+- **The desktop launcher watches the client's UI heartbeat** (`$CIRIS_HOME/run/desktop_ui.heartbeat`, `<epoch_ms> <pid>` every 5 s, from ciris-client 0.5.244). It reports once when the window hasn't answered for 30 s and once when it recovers, and it never closes the window. Clients that write no heartbeat are ignored. The headless-wheel hint now names this Python's pip rather than a bare `pip`.
+- **Boot logs one `[INSTALL]` line**: the versions, the Python path and the upgrade command, so a shared log answers "which install is this?".
+
+- **Desktop payloads for the installers** (`build-desktop-payload` in build.yml, `tools/dev/build_desktop_payload.py`). Each target gets a relocatable Python (python-build-standalone 3.12.16, pinned by sha256 in `installers/payload/python.json`) with this commit's agent and the pinned server and client installed from a hash-locked `payload.lock`. Targets: windows-x86_64, macos-arm64, macos-x86_64, linux-x86_64, and linux-aarch64 (headless, since there's no aarch64 desktop client). Artifacts are `ciris-payload-<ver>-<target>.tar.zst` plus `.payload.json`, `.payload.lock` and `.SHA256SUMS`, attached to the release on a tag. ciris-server's installer shells unpack them and keep `payload.json` as their install record. `payload.json` gives `launch_argv` and `upgrade_argv` relative to the prefix, in module form, because console scripts don't survive a move. The payload's interpreter never reads the user site: a `.pth` guard keeps `~/.local` and `%APPDATA%\Python` packages out, so an upgrade can't uninstall them. Each payload is checked from a moved prefix with a real user-site package to keep out. Desktop payloads carry their own Java 17 at `<prefix>/jre`: Liberica, jlinked with the old Windows installer's module list. The launcher finds it after the wheel's own JRE and before `JAVA_HOME`/PATH, so the desktop starts on a machine with no Java, and upgrades leave it alone. Unsigned for now.
+
+### Changed
+
+- **`ciris-agent upgrade` is the documented upgrade path** (README, docs/INSTALLATION.md), with `pipx`/`uv tool` as the recommended install. A bare `pip install -U` can upgrade a different Python's copy.
+- **`ciris-agent upgrade` under systemd hands the stop and start to systemd.** ciris-server's Linux per-user installer runs CIRIS as the user unit `ciris.service` (`CIRIS_SYSTEMD_UNIT` overrides the name). The unit is detected from `INVOCATION_ID` and trusted only when its MainPID is the recorded CIRIS. The helper then runs in its own transient unit (`systemd-run --user`), because stopping a unit ends everything in it, including an upgrade started from the app's own button. It waits for CIRIS to exit, upgrades, and restarts the unit with `systemctl --user start` instead of relaunching outside it. Without this, `Restart=` and the helper's relaunch would race pip.
+- **The desktop payload build is a reusable workflow** (`.github/workflows/desktop-payload.yml`, `workflow_call` with `agent_ref`). build.yml calls it, and ciris-server's installer workflow calls it cross-repo with no token.
+- **`ciris-agent upgrade` works in `uv tool` environments**, which have no pip: the helper falls back to `uv pip install --python`.
+- **The Python install check also runs Python 3.10** (the `python_requires` floor) and checks that `python -m ciris_engine.cli upgrade` resolves to the interpreter it runs on, on Linux and Windows. It now also runs when the upgrade code changes.
+
+### Fixed
+
+- **A DEFER is never blocked** (Eric, 2026-11-27). Deferring is how a veto reaches a Wise Authority, who can always overrule it. RATCHET run 46040465835 (sh-un-07) found a guidance task pondering at depth 7 for 31 rounds (311 LLM calls, $1.34). The cause was three paths that could replace a DEFER with a PONDER after the depth limit had already let it through as an ending action:
+  - The ban never matches a DEFER: the conscience pass skips the ban check for it, and `banned_entry_for` refuses `defer:` keys.
+  - A conscience veto no longer overrides a DEFER. The consciences still review it (the 2026-05-03 check for a dodge dressed as a refusal), and their objections ride to the Wise Authority in the deferral's context as `conscience_objections`. A veto of a DEFER is not recorded as a ban.
+  - A conscience retry no longer forces a passing DEFER into PONDER.
+  - A retry pass that ends in DEFER (the depth guardrail's) now defers. It used to fall back to the first pass's PONDER (RATCHET's TLA+ model of H3ERE, finding F6).
+- **A guidance task does not inherit the deferred task's vetoes.** The Wise Authority's resolution is the overrule the deferral asked for. The context copy already dropped the old grant and envelope; it now drops the veto record too.
+- **An objection the conscience can't classify is "justification", not "substantive".** A conscience that can't say what is wrong cannot know the action was wrong, and only a substantive objection bans for good. Changed in the response schema default, the parser's fallback and the untyped-veto fold, and in the four English conscience prompts ("substantive" only when it can name what is wrong). The localized conscience prompts never asked for an objection type, so they already fall to the default.
+
 ## [2.23.3-stable] - 2026-11-26
 
 ### Changed

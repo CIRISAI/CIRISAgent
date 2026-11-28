@@ -43,6 +43,40 @@ def _cleanup_old_logs(log_path: Path, prefix: str, keep_count: int = 5) -> None:
 from ciris_engine.logic.utils.log_dedup import RepeatCollapsingFilter
 
 
+def _log_install_line() -> None:
+    """One line saying which install this is, so a shared log answers "which Python?".
+
+    2026-11-27: a user's log showed agent 2.23.1 on Python 3.14 only through an
+    attestation path, after he had upgraded a different Python's copy.
+    """
+    try:
+        import platform
+        from importlib import metadata
+
+        from ciris_engine.constants import CIRIS_VERSION
+        from ciris_engine.upgrade import console_python, upgrade_command
+
+        def _dist(name: str) -> str:
+            try:
+                return metadata.version(name)
+            # Unknown, not fatal.
+            except Exception:  # noqa: BLE001
+                return "?"
+
+        logging.info(
+            "[INSTALL] ciris-agent %s, ciris-server %s, ciris-client %s on Python %s at %s. Upgrade with: %s",
+            CIRIS_VERSION,
+            _dist("ciris-server"),
+            _dist("ciris-client"),
+            platform.python_version(),
+            console_python(),
+            upgrade_command(),
+        )
+    # Logging setup must never fail over this.
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def setup_basic_logging(
     level: int = logging.INFO,
     log_format: str = DEFAULT_LOG_FORMAT,
@@ -191,6 +225,7 @@ def setup_basic_logging(
     if enable_incident_capture:
         log_msg += f", Incident capture: {log_dir}/incidents_latest.log"
     logging.info(log_msg)
+    _log_install_line()
 
     # Print to stdout regardless of console_output setting
     if log_to_file and not console_output:

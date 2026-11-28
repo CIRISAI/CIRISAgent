@@ -1110,6 +1110,20 @@ jobs:
           path: dist/CIRIS-Setup-*.exe
           retention-days: 30
 
+  # Desktop payload: a relocatable Python (python-build-standalone, pinned in
+  # installers/payload/python.json) with this commit's agent and the pinned
+  # server + client installed from a hash-locked payload.lock. ciris-server's
+  # per-OS shells (Inno now, dmg/deb next) unpack it into the install prefix;
+  # the agent owns this half (agreed 2026-11-27). Unsigned for now (Eric,
+  # 2026-11-27). Each leg builds its own agent wheel with its own target's
+  # desktop JAR, so macos-x86_64 does not depend on the hand-built Intel wheel.
+  # linux-aarch64 is headless: ciris-client ships no aarch64 desktop wheel.
+  build-desktop-payload:
+    name: Desktop Payload
+    uses: ./.github/workflows/desktop-payload.yml
+    permissions:
+      contents: read
+
   # Headless wheel (no desktop JAR) for server-only deployments.
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:
@@ -1951,3 +1965,30 @@ jobs:
             dist-windows/CIRIS-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Attaches whichever desktop payloads built to the release android-release
+  # created. One leg failing (macOS Intel runner capacity, say) must not hold
+  # back the others, hence always() plus explicit results for the gates.
+  publish-desktop-payload:
+    name: Attach Desktop Payloads to the Release
+    needs: [release-gate, android-release, build-desktop-payload]
+    if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent' && needs.release-gate.result == 'success' && needs.android-release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download payload artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: desktop-payload-*
+          path: dist-payload/
+          merge-multiple: true
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -lh dist-payload/
+          gh release upload "$GITHUB_REF_NAME" dist-payload/* --clobber -R "$GITHUB_REPOSITORY"

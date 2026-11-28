@@ -1,0 +1,58 @@
+{
+  "_comment": "The interpreter each desktop payload ships: astral-sh/python-build-standalone install_only builds, pinned by release and sha256 (from that release's SHA256SUMS). tools/dev/build_desktop_payload.py refuses any download that does not match.",
+  "release": "20261110",
+  "python_version": "3.12.16",
+  "base_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/",
+  "targets": {
+    "windows-x86_64": {
+      "file": "cpython-3.12.16+20261110-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "e23fe5b16926de1d81661b1a97352e89fb167549c55a6825796ccd0f32ec7f1b",
+      "interpreter": "python/python.exe",
+      "client_platform": "win_amd64",
+      "desktop": true
+    },
+    "macos-arm64": {
+      "file": "cpython-3.12.16+20261110-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "e956e60bc9465d577ef8062059aa05cd3a2665b4b8678a2ed24e432368330b8f",
+      "interpreter": "python/bin/python3",
+      "client_platform": "macosx_11_0_arm64",
+      "desktop": true
+    },
+    "macos-x86_64": {
+      "file": "cpython-3.12.16+20261110-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "83f2922437e6d546d0fcdb8c11f150a8e52787e8d9ea8651b1974e20908eb1bc",
+      "interpreter": "python/bin/python3",
+      "client_platform": "macosx_10_9_x86_64",
+      "desktop": true
+    },
+    "linux-x86_64": {
+      "file": "cpython-3.12.16+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "c2f87d4b4e8db3abddb0f116c6ccfc503d0cbdbb9ee8faacddad1b679ec12e99",
+      "interpreter": "python/bin/python3",
+      "client_platform": "manylinux_2_17_x86_64",
+      "desktop": true
+    },
+    "linux-aarch64": {
+      "file": "cpython-3.12.16+20261110-aarch64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "4792f81750282597fb2a3389fe18b945ed2ba6aad5e45ad406d122c58cb33081",
+      "interpreter": "python/bin/python3",
+      "client_platform": null,
+      "desktop": false
+    }
+  },
+  "jre_modules": [
+    "java.base",
+    "java.desktop",
+    "java.management",
+    "java.logging",
+    "java.naming",
+    "java.net.http",
+    "java.security.jgss",
+    "java.sql",
+    "jdk.crypto.ec",
+    "jdk.localedata",
+    "jdk.unsupported",
+    "jdk.zipfs"
+  ],
+  "_jre_comment": "Desktop targets jlink these modules from a JDK 17 (CI: Liberica, which still runs on Windows 7) into <prefix>/jre. Same list as installers/windows/bundle-jre.ps1."
+}

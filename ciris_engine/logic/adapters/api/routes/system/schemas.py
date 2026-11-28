@@ -30,6 +30,49 @@ class SystemWarning(BaseModel):
     action_url: Optional[str] = Field(None, description="URL path to resolve the warning (e.g., '/settings/llm')")
 
 
+class InstallInfo(BaseModel):
+    """Which install is answering, and the one command that upgrades THAT install.
+
+    A machine can hold several Pythons, each with its own copy of CIRIS. On
+    2026-11-27 a Windows user upgraded 3.15's copy with ``pip install -U`` while
+    his shortcut kept starting 3.14's, so his node stayed on 2.23.1 and nothing
+    said so. A client that shows these fields can tell "out of date" and "wrong
+    interpreter" apart, and the upgrade command names this interpreter, so it
+    cannot upgrade a different one.
+    """
+
+    agent_version: str = Field(..., description="ciris-agent version of the running install")
+    server_version: Optional[str] = Field(
+        None, description="ciris-server version installed beside it; null if it could not be read"
+    )
+    client_version: Optional[str] = Field(
+        None, description="ciris-client version installed beside it; null if it could not be read"
+    )
+    python_version: str = Field(..., description="Version of the Python running this install, e.g. '3.14.2'")
+    python_executable: Optional[str] = Field(
+        None,
+        description=(
+            "Full path of the Python running this install. Null for a caller who is not signed in: "
+            "the path carries the OS user name."
+        ),
+    )
+    upgrade_argv: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Argv that upgrades this install: this Python, `-m ciris_engine.cli upgrade`. It closes "
+            "CIRIS first and starts it again afterwards, so a desktop client may run it as-is. "
+            "Null for a caller who is not signed in."
+        ),
+    )
+    upgrade_command: Optional[str] = Field(
+        None,
+        description=(
+            "The same command as text to paste into this platform's usual shell (PowerShell on Windows). "
+            "Null for a caller who is not signed in."
+        ),
+    )
+
+
 class SystemHealthResponse(BaseModel):
     """Overall system health status."""
 
@@ -91,6 +134,14 @@ class SystemHealthResponse(BaseModel):
             "holding only the parsed set. Conferred scopes are signed by the trust "
             "root; these are not, and the two must never be unioned. Read by "
             "CIRISClient's CapabilityWire as FIELD_AGENT."
+        ),
+    )
+
+    install: Optional[InstallInfo] = Field(
+        None,
+        description=(
+            "Which install is answering and how to upgrade it. The key is absent on agents older than "
+            "2.24.0. Null only if the install could not describe itself."
         ),
     )
 

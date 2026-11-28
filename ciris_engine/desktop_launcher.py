@@ -10,13 +10,16 @@ The launcher:
 3. The desktop app connects to the running CIRIS API server
 """
 
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils import win_console as _win_console
 
@@ -24,6 +27,14 @@ from ciris_engine.logic.utils import win_console as _win_console
 _desktop_proc: Optional["subprocess.Popen[bytes]"] = None
 
 _win_console.setup()
+
+logger = logging.getLogger(__name__)
+
+#: The desktop client's UI thread rewrites this every 5 s (CIRISClient PLAN-0.5.244 §2.7):
+#: one line, ``<epoch_ms> <pid>``, under ``$CIRIS_HOME/run`` (default ``~/ciris``).
+UI_HEARTBEAT_NAME = "desktop_ui.heartbeat"
+UI_STALE_SECS = 30.0
+UI_POLL_SECS = 5.0
 
 
 def _java_exe_name() -> str:
@@ -65,15 +76,48 @@ def find_bundled_jre() -> Optional[str]:
     return None
 
 
+def payload_prefix(executable: Optional[str] = None) -> Optional[Path]:
+    """The desktop-payload install prefix this interpreter runs from, if any.
+
+    A payload (tools/dev/build_desktop_payload.py) puts payload.json at the
+    prefix root, beside python/. The interpreter is python/python.exe or
+    python/bin/python3, so the prefix is one or two levels above its directory.
+    """
+    exe = Path(executable or sys.executable)
+    for parent in list(exe.parents)[:3]:
+        if (parent / "payload.json").is_file():
+            return parent
+    return None
+
+
+def find_payload_jre(executable: Optional[str] = None) -> Optional[str]:
+    """The JRE a desktop payload ships at <prefix>/jre/.
+
+    It sits outside site-packages, so `ciris-agent upgrade` never removes it.
+    Machines with no Java 17 rely on it (2.24.0; the old frozen installer
+    bundled one the same way).
+    """
+    prefix = payload_prefix(executable)
+    if prefix is None:
+        return None
+    jre_root = prefix / "jre"
+    java = jre_root / "bin" / _java_exe_name()
+    if java.exists():
+        _ensure_bundled_jre_executable(jre_root)
+        return str(java)
+    return None
+
+
 def find_java() -> Optional[str]:
     """Find Java executable.
 
     Preference order:
       1. Bundled JRE shipped in the wheel (standalone install).
-      2. JAVA_HOME.
-      3. ``java`` on PATH.
+      2. The desktop payload's JRE (<prefix>/jre).
+      3. JAVA_HOME.
+      4. ``java`` on PATH.
     """
-    bundled = find_bundled_jre()
+    bundled = find_bundled_jre() or find_payload_jre()
     if bundled:
         return bundled
 
@@ -135,20 +179,77 @@ def _run_from_private_copy(jar: Path) -> Path:
     try:
         from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-        return Path(private_jar(jar, home))
+        private = Path(private_jar(jar, home))
+        _with_class_path(jar, private)
+        return private
     except ImportError:
         pass  # ciris-server < 0.5.245
     dest = home / "runtime" / "desktop" / jar.name
     try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists() or dest.stat().st_size != jar.stat().st_size:
-            tmp = dest.with_suffix(f".{os.getpid()}.tmp")
-            shutil.copyfile(jar, tmp)
-            os.replace(tmp, dest)
+        _copy_if_changed(jar, dest)
+        _with_class_path(jar, dest)
         return dest
     except OSError as e:
         print(f"Running the desktop app in place ({e})", file=sys.stderr)
         return jar
+
+
+def _copy_if_changed(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.exists() or dest.stat().st_size != src.stat().st_size:
+        tmp = dest.with_suffix(f".{os.getpid()}.tmp")
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dest)
+
+
+def manifest_class_path(jar: Path) -> List[str]:
+    """The relative entries of a JAR's manifest ``Class-Path`` (continuation lines joined)."""
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            text = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return []
+    joined = re.sub(r"\r?\n ", "", text.replace("\r\n", "\n"))
+    for line in joined.split("\n"):
+        if line.startswith("Class-Path:"):
+            return [e for e in line[len("Class-Path:") :].split() if e and not re.match(r"^[a-z]+:", e)]
+    return []
+
+
+def _with_class_path(installed: Path, private: Path) -> None:
+    """Put the JAR's ``Class-Path`` files beside its private copy, at the same relative paths.
+
+    The JVM resolves ``Class-Path`` against the JAR's own directory and ignores a
+    missing entry without a word. ciris-client 0.5.243 reaches FFmpeg through
+    ``../../ciris_holon/media/jars/*`` beside the installed JAR, so the private
+    copy started with no video. Copies, not references: the copy exists so the
+    running JVM holds no file in site-packages open (WinError 32).
+    """
+    if private == installed:
+        return
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    home = get_ciris_home().resolve()
+    for entry in manifest_class_path(installed):
+        source = (installed.parent / entry).resolve()
+        if not source.is_file():
+            continue
+        target = private.parent / entry
+        if not target.resolve().is_relative_to(home):
+            continue  # never write outside CIRIS_HOME, whatever the manifest names
+        try:
+            _copy_if_changed(source, target)
+            # The client's check_holon_classpath.py verifies each copied JAR against the
+            # SHA256SUMS in its directory, so the list travels with the JARs. Compared by
+            # content: an edited list can keep its size.
+            sums = source.parent / "SHA256SUMS"
+            sums_target = target.parent / "SHA256SUMS"
+            if sums.is_file() and (not sums_target.is_file() or sums_target.read_bytes() != sums.read_bytes()):
+                shutil.copyfile(sums, sums_target)
+        except OSError as e:
+            print(f"Could not copy {entry} beside the desktop app ({e}); calls may have no video", file=sys.stderr)
 
 
 def stop_desktop_app() -> None:
@@ -257,6 +358,63 @@ def desktop_app_env(server_url: str, base: Optional[Dict[str, str]] = None) -> D
     return env
 
 
+def ui_heartbeat_path(env: Dict[str, str]) -> Path:
+    """Where the client writes its heartbeat: the client's own home rule, from the env it runs with."""
+    home = (env.get("CIRIS_HOME") or "").strip()
+    return (Path(home) if home else Path.home() / "ciris") / "run" / UI_HEARTBEAT_NAME
+
+
+def ui_heartbeat_age(path: Path, pid: int, now_s: float) -> Optional[float]:
+    """Seconds since THIS window's UI thread last wrote, or None if there is nothing to judge.
+
+    None for: no file (a client older than 0.5.244 writes none), an unreadable or
+    malformed line, or a line from another process (a previous run's leftover).
+    """
+    try:
+        parts = path.read_text(encoding="utf-8").split()
+        epoch_ms, writer = int(parts[0]), int(parts[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    if writer != pid:
+        return None
+    return max(0.0, now_s - epoch_ms / 1000.0)
+
+
+def watch_ui_heartbeat(
+    proc: "subprocess.Popen[bytes]",
+    path: Path,
+    report: Callable[[str], None],
+    stale_secs: float = UI_STALE_SECS,
+    poll_secs: float = UI_POLL_SECS,
+    clock: Callable[[], float] = time.time,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Report once when the window stops answering and once when it recovers.
+
+    Reports only; it never ends the window. Caveat: an idle UI thread behind an
+    invisible overlay still beats (the 2026-11-27 freeze), and the client's own
+    input-swallow check covers that case.
+    """
+    stuck = False
+    while proc.poll() is None:
+        age = ui_heartbeat_age(path, proc.pid, clock())
+        if age is not None and age > stale_secs and not stuck:
+            stuck = True
+            report(
+                f"CIRIS Desktop (pid {proc.pid}) has not responded for {age:.0f} s. "
+                "If the window stays frozen, close it and start CIRIS again."
+            )
+        elif age is not None and age <= stale_secs and stuck:
+            stuck = False
+            report(f"CIRIS Desktop (pid {proc.pid}) is responding again.")
+        sleep(poll_secs)
+
+
+def _report_ui(text: str) -> None:
+    logger.warning("[DESKTOP-UI] %s", text)
+    print(text, file=sys.stderr)
+
+
 def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     """
     Launch the CIRIS Desktop application.
@@ -275,7 +433,10 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
         print("\nThe desktop app JAR was not included in this installation.", file=sys.stderr)
         print("This can happen if you installed the headless wheel.\n", file=sys.stderr)
         print("To fix, try reinstalling with the platform-specific wheel:", file=sys.stderr)
-        print("  pip install --force-reinstall ciris-agent", file=sys.stderr)
+        from ciris_engine.upgrade import console_python
+
+        # This Python's pip, never whichever pip is first on PATH.
+        print(f'  "{console_python()}" -m pip install --force-reinstall ciris-agent', file=sys.stderr)
         print("\nOr run in headless server mode:", file=sys.stderr)
         print("  ciris-agent --server", file=sys.stderr)
         return 1
@@ -303,6 +464,12 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     global _desktop_proc
     try:
         _desktop_proc = subprocess.Popen([java, "-jar", str(jar_path)], env=env)
+        threading.Thread(
+            target=watch_ui_heartbeat,
+            args=(_desktop_proc, ui_heartbeat_path(env), _report_ui),
+            name="desktop-ui-heartbeat",
+            daemon=True,
+        ).start()
         return _desktop_proc.wait()
     except KeyboardInterrupt:
         print("\nShutting down...")

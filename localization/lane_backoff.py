@@ -43,7 +43,7 @@ import sys
 import time
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, List, Optional, TypeVar
 
 HERE = Path(__file__).resolve().parent
 
@@ -167,8 +167,43 @@ def main() -> int:
     import localize  # noqa: E402  the vendored module, unmodified
 
     install(localize)
+    refusal = keep_only_refusal(localize, sys.argv[1:])
+    if refusal:
+        print(refusal)
+        return 2
     rc: int = localize.main()
     return rc
+
+
+def keep_only_refusal(L: ModuleType, argv: List[str]) -> Optional[str]:
+    """Refuse a translate run that could only draft, review and KEEP (TARGET=ui; prompts has its own).
+
+    With --keys and no --overwrite, localize.py translates and reviews every selected key, then keeps any
+    value already present: paid for, never written (run 46093145549, 2026-11-28: $22.07, 0 written).
+    """
+    import argparse
+
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--lane", default="translate")
+    p.add_argument("--keys", action="append", default=[])
+    p.add_argument("--lang", action="append", default=[])
+    p.add_argument("--overwrite", action="store_true")
+    p.add_argument("--check", action="store_true")
+    a, _ = p.parse_known_args(argv)
+    if a.lane != "translate" or not a.keys or a.overwrite or a.check:
+        return None
+    _, selection = L.select(a.keys, a.lang, only_missing=False)
+    kept = 0
+    for lang, keys in selection.items():
+        have = L.guard.flat_values(L.load(L.CANONICAL / f"{lang}.json"))
+        kept += sum(1 for k in keys if k in have and str(have[k]).strip())
+    if not kept:
+        return None
+    return (
+        f"[refuse] {kept} selected key-value(s) already have a translation. Without --overwrite the lane "
+        "would translate and review them, then keep the old values: paid for, never written. Pass "
+        "--overwrite (workflow input overwrite: true) to replace them, or narrow --keys / --lang."
+    )
 
 
 if __name__ == "__main__":

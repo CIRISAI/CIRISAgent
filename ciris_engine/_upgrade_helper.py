@@ -6,16 +6,19 @@ on Windows anything running from site-packages, or from Scripts\\ciris-agent.exe
 is a file pip can't move. pip then fails part way through (WinError 32) and leaves
 a half-installed agent that dies at import.
 
-    python helper.py --python <exe> --requirement ciris-agent --wait-pid N --log F [--relaunch JSON]
+    python -I helper.py [--version 2.24.0] --wait-pid N --log F --stop-flag F [--relaunch JSON]
+
+It installs into the interpreter that runs it (sys.executable), and takes no path to one.
 """
 
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
-from typing import List
+from typing import List, Optional
 
 
 def wait_for_exit(pid: int, timeout_secs: float) -> bool:
@@ -56,10 +59,48 @@ def say(log: str, text: str) -> None:
         out.write(f"[upgrade {time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
 
 
+def normalized_version(version: str) -> str:
+    """``version`` rebuilt from its integers (2.24.0), else SystemExit.
+
+    Releases are numeric. Rebuilding from int() means no text a caller supplied
+    reaches pip's command line, only digits and dots.
+    """
+    parts = version.split(".")
+    if not 1 <= len(parts) <= 4 or not all(p.isdigit() for p in parts):
+        raise SystemExit(f"--version must be a release such as 2.24.0, got {version!r}")
+    return ".".join(str(int(p)) for p in parts)
+
+
+def requirement_for(version: Optional[str]) -> str:
+    """The one package this helper installs: ciris-agent, optionally pinned."""
+    return "ciris-agent" if version is None else f"ciris-agent=={normalized_version(version)}"
+
+
+def pip_install_argv(version: Optional[str], log: str) -> List[str]:
+    """The install command for THIS interpreter's environment.
+
+    The helper is started by the interpreter it upgrades (``python -I helper.py``),
+    so it installs into ``sys.executable`` and takes no interpreter path from its
+    arguments. ``python -m pip`` where that environment has pip (pip, pipx); a
+    ``uv tool`` environment has none, so there it is ``uv pip install --python``.
+    """
+    python = sys.executable
+    requirement = requirement_for(version)
+    has_pip = subprocess.run(
+        [python, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    ).returncode == 0
+    if not has_pip:
+        uv = shutil.which("uv")
+        if uv:
+            say(log, "no pip in this environment; using uv")
+            return [uv, "pip", "install", "--python", python, "--upgrade", requirement]
+        say(log, "no pip in this environment and no uv on PATH; trying pip anyway")
+    return [python, "-m", "pip", "install", "--upgrade", requirement]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--python", required=True)
-    ap.add_argument("--requirement", required=True)
+    ap.add_argument("--version", default=None, help="release to install (default: the latest)")
     ap.add_argument("--wait-pid", type=int, required=True)
     ap.add_argument("--log", required=True)
     ap.add_argument("--stop-flag", required=True)
@@ -70,10 +111,10 @@ def main() -> int:
     if not wait_for_exit(args.wait_pid, 30.0):
         say(args.log, "it did not exit; not upgrading over a running CIRIS")
         return 1
-    rc = run([args.python, "-m", "pip", "install", "--upgrade", args.requirement], args.log)
+    rc = run(pip_install_argv(args.version, args.log), args.log)
     say(args.log, f"pip exited {rc}")
     # Clears any ~iris* leftovers from an earlier failed upgrade (ciris-server >= 0.5.245).
-    run([args.python, "-m", "ciris_server.upgrade", "--repair"], args.log)
+    run([sys.executable, "-m", "ciris_server.upgrade", "--repair"], args.log)
     try:
         os.remove(args.stop_flag)
     except OSError:

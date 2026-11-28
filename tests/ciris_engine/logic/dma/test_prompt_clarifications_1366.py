@@ -72,7 +72,8 @@ ROLE_TEXTS = {
 @pytest.mark.parametrize("stage", sorted(ROLE_TEXTS))
 def test_item11_roles_are_stated(stage: str) -> None:
     text = _flat(ROLE_TEXTS[stage]())
-    assert "OBSERVER may shape their own answer for this turn" in text
+    # Eric 2026-11-27: OBSERVER means unprivileged; say so, and keep the role label the sender block shows.
+    assert "sender with no privileges (verified role `OBSERVER`) may shape their own answer for this turn" in text
     assert "Only a Wise Authority or the owner sets standing rules" in text
     assert "signed guidance or an approved amendment" in text
     assert "even by a Wise Authority, is advisory until" in text

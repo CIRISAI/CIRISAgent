@@ -21,13 +21,15 @@ from ciris_engine.schemas.types import JSONDict
 
 #: The output-contract field every LLM-backed conscience answers with when it
 #: objects (CIRISAgent#1366 item 7). Not a required field and never a reask: an
-#: unknown or missing answer is SUBSTANTIVE, the type the drafter cannot argue
-#: away (fail safe). Ignored when the conscience passes.
+#: unknown or missing answer is JUSTIFICATION: a conscience that did not say what
+#: is wrong cannot know the action was wrong (Eric, 2026-11-27), and only a
+#: substantive objection bans for good. Ignored when the conscience passes.
 _OBJECTION_TYPE_DESCRIPTION = (
     "When you object: 'evidence' if the action relies on a rule or authority you cannot see "
     "in your input; 'justification' if the action may be acceptable but its stated "
     "justification is insufficient; 'substantive' for an ethical, safety or coherence "
-    "problem with the action itself. 'substantive' when unsure or when you do not object."
+    "problem with the action itself, only when you can name what is wrong with it. "
+    "'justification' when unsure or when you do not object."
 )
 
 
@@ -37,7 +39,7 @@ ObjectionTypeAnswer = Literal["evidence", "justification", "substantive"]
 
 
 def _objection_type_field() -> Any:
-    return Field(default=ObjectionType.SUBSTANTIVE.value, description=_OBJECTION_TYPE_DESCRIPTION)
+    return Field(default=ObjectionType.JUSTIFICATION.value, description=_OBJECTION_TYPE_DESCRIPTION)
 
 
 class ConscienceStatus(str, Enum):

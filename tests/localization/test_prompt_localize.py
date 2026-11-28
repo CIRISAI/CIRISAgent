@@ -506,7 +506,8 @@ def test_a_resplit_pair_is_written_together_and_the_loader_renders_it_once(
     assert {"es:coh_conscience.system_prompt", "es:coh_conscience.system_prompt_tail"} <= set(written)
     loader = ConsciencePromptLoader(prompts_dir=str(two_roots[1]), language="es")
     got_head, _, got_tail = loader.get_system_prompt_parts("coh_conscience")
-    assert got_head == head and got_tail == tail
+    assert got_head == head
+    assert got_tail == tail
     assert (got_head + got_tail).count("Responde con JSON") == 1
 
 
@@ -515,7 +516,8 @@ def test_half_a_resplit_pair_writes_nothing(two_roots: list, tmp_path: Path, res
     path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
     before = path.read_text(encoding="utf-8")
     written, rejected = PL.write_back(_conscience_stage(tmp_path, {"system_prompt": "Eres IRIS-C."}), ["es"], two_roots)
-    assert written == [] and "written together or not at all" in rejected["es:coh_conscience.system_prompt"][0]
+    assert written == []
+    assert "written together or not at all" in rejected["es:coh_conscience.system_prompt"][0]
     assert path.read_text(encoding="utf-8") == before
 
 
@@ -528,7 +530,8 @@ def test_a_resplit_pair_with_a_broken_tail_writes_neither(two_roots: list, tmp_p
         two_roots,
     )
     assert not any(k.startswith("es:coh_conscience.system_prompt") for k in written)
-    assert rejected and path.read_text(encoding="utf-8") == before
+    assert rejected
+    assert path.read_text(encoding="utf-8") == before
 
 
 def test_a_resplit_pair_already_done_in_a_locale_is_not_redone(two_roots: list, tmp_path: Path, resplit: None) -> None:
@@ -560,13 +563,15 @@ def test_selecting_only_missing_keys_is_not_refused(two_roots: list, tmp_path: P
 def test_the_lane_refuses_a_keep_only_run_and_spends_nothing(capsys: pytest.CaptureFixture[str]) -> None:
     before = _localized_snapshot()
     rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--dry-run"])
-    assert rc == 2 and "[refuse]" in capsys.readouterr().out
+    assert rc == 2
+    assert "[refuse]" in capsys.readouterr().out
     assert _localized_snapshot() == before
 
 
 def test_overwrite_lets_the_same_selection_through(capsys: pytest.CaptureFixture[str]) -> None:
     rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--overwrite", "--dry-run"])
-    assert rc == 0 and "[refuse]" not in capsys.readouterr().out
+    assert rc == 0
+    assert "[refuse]" not in capsys.readouterr().out
 
 
 def test_the_ui_lane_refuses_a_keep_only_run_too() -> None:
@@ -576,7 +581,8 @@ def test_the_ui_lane_refuses_a_keep_only_run_too() -> None:
 
     # A fresh copy: the prompts target repoints the shared module's CANONICAL at its stage.
     spec = importlib.util.spec_from_file_location("localize_ui_fresh", REPO / "localization" / "localize.py")
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     L = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(L)
     L.CANONICAL = L.REPO_ROOT / L.guard.UI_BUNDLE  # LOCALIZE_TARGET may be left at prompts by an earlier test

@@ -230,12 +230,38 @@ def test_the_helper_falls_back_to_uv_without_pip(tmp_path: Path) -> None:
     from ciris_engine import _upgrade_helper as helper
 
     log = str(tmp_path / "u.log")
+    python = tmp_path / "tools" / "ciris-agent" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text("")
     with patch.object(helper.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)), patch.object(
         helper.shutil, "which", return_value="/usr/bin/uv"
     ):
-        argv = helper.pip_install_argv("/tools/ciris-agent/bin/python", "ciris-agent", log)
-    assert argv == ["/usr/bin/uv", "pip", "install", "--python", "/tools/ciris-agent/bin/python", "--upgrade", "ciris-agent"]
+        argv = helper.pip_install_argv(str(python), "ciris-agent", log)
+    assert argv == ["/usr/bin/uv", "pip", "install", "--python", str(python), "--upgrade", "ciris-agent"]
     assert "using uv" in Path(log).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "python, requirement",
+    [
+        ("python3; rm -rf ~", "ciris-agent"),  # not a path to an executable
+        ("relative/python3", "ciris-agent"),  # not absolute
+        ("{exe}", "ciris-agent --index-url http://evil"),  # an extra pip argument
+        ("{exe}", "requests"),  # another package
+        ("{exe}", "ciris-agent==2.24.0; echo"),
+    ],
+)
+def test_the_helper_runs_only_a_python_and_ciris_agent(tmp_path: Path, python: str, requirement: str) -> None:
+    from ciris_engine import _upgrade_helper as helper
+
+    with pytest.raises(SystemExit):
+        helper.pip_install_argv(python.format(exe=sys.executable), requirement, str(tmp_path / "u.log"))
+
+
+def test_a_pinned_version_is_a_valid_requirement() -> None:
+    from ciris_engine import _upgrade_helper as helper
+
+    assert helper.checked_requirement("ciris-agent==2.24.0") == "ciris-agent==2.24.0"
 
 
 def test_logging_setup_states_the_install(caplog: pytest.LogCaptureFixture) -> None:
@@ -246,7 +272,8 @@ def test_logging_setup_states_the_install(caplog: pytest.LogCaptureFixture) -> N
     with caplog.at_level(logging.INFO):
         logging_config._log_install_line()
     line = next(r.getMessage() for r in caplog.records if "[INSTALL]" in r.getMessage())
-    assert sys.version.split()[0] in line and "ciris_engine.cli upgrade" in line
+    assert sys.version.split()[0] in line
+    assert "ciris_engine.cli upgrade" in line
 
 
 # --- desktop UI heartbeat (CIRISClient PLAN-0.5.244 §2.7) ---
@@ -345,7 +372,7 @@ def test_the_private_copy_brings_its_class_path_along(tmp_path: Path) -> None:
     private.parent.mkdir(parents=True)
     private.write_bytes(installed.read_bytes())
     with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=tmp_path / "home"):
-        assert desktop_launcher._with_class_path(installed, private) == private
+        desktop_launcher._with_class_path(installed, private)
     # Resolved from the COPY's directory, exactly as the JVM will.
     assert (private.parent / entry).resolve().read_bytes() == b"ffmpeg"
     assert (tmp_path / "home" / "ciris_holon" / "media" / "jars" / "ffmpeg-7.1-1.5.11-linux-x86_64.jar").exists()
@@ -354,7 +381,7 @@ def test_the_private_copy_brings_its_class_path_along(tmp_path: Path) -> None:
 def test_running_in_place_copies_nothing(tmp_path: Path) -> None:
     jar = tmp_path / "CIRIS.jar"
     _jar_with_class_path(jar, ["../x.jar"])
-    assert desktop_launcher._with_class_path(jar, jar) == jar
+    desktop_launcher._with_class_path(jar, jar)
     assert not (tmp_path.parent / "x.jar").exists()
 
 
@@ -363,7 +390,8 @@ def test_the_installed_client_jar_parses_if_present() -> None:
     if jar is None:
         pytest.skip("no desktop JAR installed here")
     for entry in desktop_launcher.manifest_class_path(jar):
-        assert not entry.startswith("/") and not entry.startswith("file:")
+        assert not entry.startswith("/")
+        assert not entry.startswith("file:")
 
 
 def test_class_path_copies_never_leave_ciris_home(tmp_path: Path) -> None:
@@ -491,5 +519,17 @@ def test_the_helper_leaves_the_unit_through_systemd_run(tmp_path: Path, monkeypa
     monkeypatch.setattr(upgrade.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
     upgrade._start_helper(tmp_path, "ciris-agent", ["systemctl", "--user", "start", "ciris.service"], wait_pid=4242, outside_unit="ciris.service")
     cmd = started[0]
-    assert cmd[:4] == ["systemd-run", "--user", "--collect", "--quiet"] and cmd[4].startswith("--unit=ciris-upgrade-")
+    assert cmd[:4] == ["systemd-run", "--user", "--collect", "--quiet"]
+    assert cmd[4].startswith("--unit=ciris-upgrade-")
     assert cmd[cmd.index("--wait-pid") + 1] == "4242"
+
+
+def test_a_version_that_is_not_one_is_refused(tmp_path: Path) -> None:
+    with patch.object(upgrade, "_start_helper") as helper:
+        assert upgrade.run_upgrade(["--to", "2.24.0 --index-url http://evil"], home=tmp_path) == 2
+    helper.assert_not_called()
+
+
+def test_a_helper_that_cannot_start_is_a_failure(tmp_path: Path) -> None:
+    with patch.object(upgrade, "_start_helper", side_effect=OSError("no python")):
+        assert upgrade.run_upgrade([], home=tmp_path) == 1

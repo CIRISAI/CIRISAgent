@@ -11,11 +11,13 @@ a half-installed agent that dies at import.
 
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import List
 
 
@@ -57,6 +59,27 @@ def say(log: str, text: str) -> None:
         out.write(f"[upgrade {time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
 
 
+#: What --requirement may be: ciris-agent, optionally pinned to one version. Nothing else is installed.
+_REQUIREMENT = re.compile(r"ciris-agent(==[0-9][0-9A-Za-z.+!-]*)?")
+#: What --python may be named: a CPython executable (python, python3, python3.12, pythonw, .exe).
+_PYTHON_NAME = re.compile(r"python(w)?(3(\.[0-9]+)?)?(\.exe)?", re.IGNORECASE)
+
+
+def checked_python(python: str) -> str:
+    """``python`` if it is an existing Python executable, else SystemExit. It is passed to subprocess."""
+    path = Path(python)
+    if not path.is_absolute() or not path.is_file() or not _PYTHON_NAME.fullmatch(path.name):
+        raise SystemExit(f"--python must be the absolute path of a Python executable, got {python!r}")
+    return str(path)
+
+
+def checked_requirement(requirement: str) -> str:
+    """``requirement`` if it names ciris-agent (optionally ==VERSION), else SystemExit."""
+    if not _REQUIREMENT.fullmatch(requirement):
+        raise SystemExit(f"--requirement must be ciris-agent or ciris-agent==VERSION, got {requirement!r}")
+    return requirement
+
+
 def pip_install_argv(python: str, requirement: str, log: str) -> List[str]:
     """The install command for ``python``'s environment.
 
@@ -64,6 +87,8 @@ def pip_install_argv(python: str, requirement: str, log: str) -> List[str]:
     environment has no pip, so there it is ``uv pip install --python``, which
     installs into the same environment.
     """
+    python = checked_python(python)
+    requirement = checked_requirement(requirement)
     has_pip = subprocess.run(
         [python, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     ).returncode == 0

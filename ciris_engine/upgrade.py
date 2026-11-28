@@ -24,6 +24,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -227,6 +228,10 @@ def upgrade_command(executable: Optional[str] = None, platform: Optional[str] = 
     return shlex.join(argv)
 
 
+#: A version --to accepts (PEP 440 characters only): it becomes ciris-agent==VERSION on a pip command line.
+_VERSION = re.compile(r"[0-9][0-9A-Za-z.+!-]*")
+
+
 def _requirement(version: Optional[str]) -> str:
     return f"ciris-agent=={version}" if version else "ciris-agent"
 
@@ -287,6 +292,9 @@ def run_upgrade(argv: List[str], home: Optional[Path] = None) -> int:
 
         home = get_ciris_home()
 
+    if args.to is not None and not _VERSION.fullmatch(args.to):
+        print(f"--to must be a version such as 2.24.0, got {args.to!r}", file=sys.stderr)
+        return 2
     running = read_running(home)
     relaunch: Optional[List[str]] = None
     unit = supervised_unit(running) if running else None
@@ -295,7 +303,11 @@ def run_upgrade(argv: List[str], home: Optional[Path] = None) -> int:
         # helper's own relaunch would race pip (ciris-server's Linux installer).
         pid = int(str(running["pid"]))
         relaunch = None if args.no_restart else ["systemctl", "--user", "start", unit]
-        log = _start_helper(home, _requirement(args.to), relaunch, wait_pid=pid, outside_unit=unit)
+        try:
+            log = _start_helper(home, _requirement(args.to), relaunch, wait_pid=pid, outside_unit=unit)
+        except OSError as e:
+            print(f"Could not start the upgrade helper: {e}", file=sys.stderr)
+            return 1
         print(f"Stopping {unit} (pid {pid}) for the upgrade. Progress: {log}")
         subprocess.run(["systemctl", "--user", "stop", "--no-block", unit], check=False)
         if relaunch:
@@ -313,7 +325,11 @@ def run_upgrade(argv: List[str], home: Optional[Path] = None) -> int:
         if isinstance(saved, list) and not args.no_restart:
             relaunch = [str(a) for a in saved]
 
-    log = _start_helper(home, _requirement(args.to), relaunch)
+    try:
+        log = _start_helper(home, _requirement(args.to), relaunch)
+    except OSError as e:
+        print(f"Could not start the upgrade helper: {e}. CIRIS was closed; start it again.", file=sys.stderr)
+        return 1
     print(f"Upgrading. Progress: {log}")
     if relaunch:
         print("CIRIS starts again when the upgrade finishes.")

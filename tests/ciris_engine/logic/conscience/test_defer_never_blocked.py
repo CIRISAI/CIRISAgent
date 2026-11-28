@@ -111,7 +111,8 @@ async def test_the_retry_does_not_force_a_passing_defer_into_ponder() -> None:
 @pytest.mark.asyncio
 async def test_a_vetoed_speak_is_still_overridden() -> None:
     result, _ = await _run(_phase(coherence=Scripted(_veto(ObjectionType.SUBSTANTIVE))), _speak("hello"))
-    assert result.overridden and result.final_action.selected_action == HandlerActionType.PONDER
+    assert result.overridden
+    assert result.final_action.selected_action == HandlerActionType.PONDER
 
 
 @pytest.mark.parametrize("answer", [None, "", "nonsense", 7])

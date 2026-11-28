@@ -12,7 +12,7 @@ Captures detailed results from all 6 consciences:
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from ciris_engine.logic.conscience.veto_contract import (
     action_equivalence_key,
@@ -852,7 +852,7 @@ class ConscienceExecutionPhase:
         ]
         if not lines:
             return action_result
-        context: Dict[str, Union[str, List[str]]] = dict(params.context or {})
+        context: Dict[str, str | List[str]] = dict(params.context or {})
         context["conscience_objections"] = lines
         return action_result.model_copy(update={"action_parameters": params.model_copy(update={"context": context})})
 

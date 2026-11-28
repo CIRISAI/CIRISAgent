@@ -864,7 +864,8 @@ def collect_install_info(signed_in: bool) -> Optional[InstallInfo]:
     def _dist(name: str) -> Optional[str]:
         try:
             return metadata.version(name)
-        except Exception:  # noqa: BLE001 - a missing or unreadable dist is null, not an error
+        # A missing or unreadable dist is null, not an error.
+        except Exception:  # noqa: BLE001
             return None
 
     try:
@@ -879,7 +880,8 @@ def collect_install_info(signed_in: bool) -> Optional[InstallInfo]:
             upgrade_argv=upgrade_argv() if signed_in else None,
             upgrade_command=upgrade_command() if signed_in else None,
         )
-    except Exception as exc:  # noqa: BLE001 - health must answer even if this cannot
+    # Health must answer even if this cannot.
+    except Exception as exc:  # noqa: BLE001
         logger.warning("[HEALTH] install info unavailable: %s", type(exc).__name__)
         return None
 

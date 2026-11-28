@@ -17,7 +17,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("build_desktop_payload", ROOT / "tools" / "dev" / "build_desktop_payload.py")
-assert _spec and _spec.loader
+assert _spec
+assert _spec.loader
 bdp = importlib.util.module_from_spec(_spec)
 sys.modules["build_desktop_payload"] = bdp
 _spec.loader.exec_module(bdp)
@@ -63,7 +64,8 @@ def _manifest(target: str) -> dict:
 def test_payload_json_argv_is_relative_and_module_form(target: str) -> None:
     m = _manifest(target)
     interp = m["interpreter"]
-    assert not Path(interp).is_absolute() and ":" not in interp
+    assert not Path(interp).is_absolute()
+    assert ":" not in interp
     # Module form: console scripts carry the build machine's absolute path.
     assert m["launch_argv"] == [interp, "-m", "ciris_engine.cli"]
     assert m["upgrade_argv"] == [interp, "-m", "ciris_engine.cli", "upgrade"]

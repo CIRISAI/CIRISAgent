@@ -1560,7 +1560,8 @@ async def test_the_deferred_tasks_vetoes_are_not_inherited_by_the_guidance_task(
         context={"correlation_id": "corr-task-with-vetoes", VETO_RECORD_CONTEXT_KEY: [veto]},
     )
     original = get_task_by_id("task-with-vetoes", "default")
-    assert original is not None and [e.veto_id for e in original.veto_record] == ["veto_old"]  # the fixture holds
+    assert original is not None
+    assert [e.veto_id for e in original.veto_record] == ["veto_old"]  # the fixture holds
     deferral_id = await wise_authority_service.send_deferral(
         DeferralRequest(
             task_id="task-with-vetoes",

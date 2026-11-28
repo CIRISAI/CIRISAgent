@@ -197,7 +197,8 @@ def stage(target: str, wheel: Path, out: Path, requirements: Path, jdk: Optional
     tarball = work / pin["file"]
     url = pins["base_url"] + pin["file"].replace("+", "%2B")
     print(f"Downloading {url}", flush=True)
-    urllib.request.urlretrieve(url, tarball)  # noqa: S310 - pinned https URL, hash-checked next
+    # Pinned https URL, hash-checked next.
+    urllib.request.urlretrieve(url, tarball)  # noqa: S310
     verify_sha256(tarball, pin["sha256"])
     with tarfile.open(tarball, "r:gz") as tar:
         tar.extractall(prefix, filter="tar")  # install_only unpacks to python/

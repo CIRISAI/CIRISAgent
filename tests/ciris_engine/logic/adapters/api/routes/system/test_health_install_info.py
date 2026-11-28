@@ -25,7 +25,8 @@ def test_a_signed_in_caller_gets_the_interpreter_and_the_command(monkeypatch: py
     assert info.python_version == platform.python_version()
     assert info.python_executable == "/opt/py314/bin/python3"
     assert info.upgrade_argv == ["/opt/py314/bin/python3", "-m", "ciris_engine.cli", "upgrade"]
-    assert info.upgrade_command and "ciris_engine.cli upgrade" in info.upgrade_command
+    assert info.upgrade_command
+    assert "ciris_engine.cli upgrade" in info.upgrade_command
 
 
 def test_an_anonymous_caller_gets_versions_but_no_paths() -> None:
@@ -46,7 +47,9 @@ def test_an_unreadable_dist_is_null_not_an_error(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(metadata, "version", _missing)
     info = health.collect_install_info(signed_in=True)
-    assert info is not None and info.server_version is None and info.client_version is None
+    assert info is not None
+    assert info.server_version is None
+    assert info.client_version is None
 
 
 def test_health_still_answers_if_install_info_fails(monkeypatch: pytest.MonkeyPatch) -> None:

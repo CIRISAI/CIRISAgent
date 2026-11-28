@@ -179,13 +179,16 @@ def _run_from_private_copy(jar: Path) -> Path:
     try:
         from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-        return _with_class_path(jar, Path(private_jar(jar, home)))
+        private = Path(private_jar(jar, home))
+        _with_class_path(jar, private)
+        return private
     except ImportError:
         pass  # ciris-server < 0.5.245
     dest = home / "runtime" / "desktop" / jar.name
     try:
         _copy_if_changed(jar, dest)
-        return _with_class_path(jar, dest)
+        _with_class_path(jar, dest)
+        return dest
     except OSError as e:
         print(f"Running the desktop app in place ({e})", file=sys.stderr)
         return jar
@@ -215,7 +218,7 @@ def manifest_class_path(jar: Path) -> List[str]:
     return []
 
 
-def _with_class_path(installed: Path, private: Path) -> Path:
+def _with_class_path(installed: Path, private: Path) -> None:
     """Put the JAR's ``Class-Path`` files beside its private copy, at the same relative paths.
 
     The JVM resolves ``Class-Path`` against the JAR's own directory and ignores a
@@ -225,7 +228,7 @@ def _with_class_path(installed: Path, private: Path) -> Path:
     running JVM holds no file in site-packages open (WinError 32).
     """
     if private == installed:
-        return private
+        return
     from ciris_engine.logic.utils.path_resolution import get_ciris_home
 
     home = get_ciris_home().resolve()
@@ -247,7 +250,6 @@ def _with_class_path(installed: Path, private: Path) -> Path:
                 shutil.copyfile(sums, sums_target)
         except OSError as e:
             print(f"Could not copy {entry} beside the desktop app ({e}); calls may have no video", file=sys.stderr)
-    return private
 
 
 def stop_desktop_app() -> None:

@@ -59,7 +59,8 @@ def _log_install_line() -> None:
         def _dist(name: str) -> str:
             try:
                 return metadata.version(name)
-            except Exception:  # noqa: BLE001 - unknown, not fatal
+            # Unknown, not fatal.
+            except Exception:  # noqa: BLE001
                 return "?"
 
         logging.info(
@@ -71,7 +72,8 @@ def _log_install_line() -> None:
             console_python(),
             upgrade_command(),
         )
-    except Exception:  # noqa: BLE001 - logging setup must never fail over this
+    # Logging setup must never fail over this.
+    except Exception:  # noqa: BLE001
         pass
 
 

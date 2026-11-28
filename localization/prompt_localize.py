@@ -283,12 +283,21 @@ def locale_bundle(lang: str, en: Dict[str, Dict[str, str]], prompts: Roots = PRO
     out: Dict[str, Dict[str, str]] = {}
     for template, fields in en.items():
         doc = read_template(locale_path(prompts, lang, template))
+
+        def pending_resplit(f: str) -> bool:
+            # A re-split pair is redone from the split English (staged as missing)
+            # until this locale holds a translated tail; then the pair is done.
+            header = _resplit_header(template, f)
+            if header is None:
+                return False
+            tail = header + SPLIT_PENDING_SUFFIX
+            have_tail = doc.get(tail)
+            return not (isinstance(have_tail, str) and have_tail.strip() and have_tail != fields.get(tail))
+
         have = {
             f: doc[f]
             for f, english in fields.items()
-            if isinstance(doc.get(f), str) and doc[f].strip() and doc[f] != english
-            # A re-split pair is redone from the split English: staged as missing.
-            and _resplit_header(template, f) is None
+            if isinstance(doc.get(f), str) and doc[f].strip() and doc[f] != english and not pending_resplit(f)
         }
         if have:
             out[template] = have

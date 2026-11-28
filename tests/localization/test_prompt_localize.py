@@ -528,3 +528,12 @@ def test_a_resplit_pair_with_a_broken_tail_writes_neither(two_roots: list, tmp_p
     )
     assert not any(k.startswith("es:coh_conscience.system_prompt") for k in written)
     assert rejected and path.read_text(encoding="utf-8") == before
+
+
+def test_a_resplit_pair_already_done_in_a_locale_is_not_redone(two_roots: list, tmp_path: Path, resplit: None) -> None:
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    text = PL.set_field(path.read_text(encoding="utf-8"), "system_prompt", "Eres IRIS-C. Puntúa.")
+    path.write_text(PL.set_field(text, "system_prompt_tail", 'Responde con JSON: {"coherence": <0.0-1.0>}\n'), encoding="utf-8")
+    PL.build_stage(tmp_path / "stage", two_roots)
+    es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
+    assert {"system_prompt", "system_prompt_tail"} <= set(es["coh_conscience"])  # counted as translated

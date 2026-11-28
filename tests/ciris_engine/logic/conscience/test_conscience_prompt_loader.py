@@ -256,8 +256,8 @@ class TestConsciencePromptLoaderRealFiles:
             ("es", "Eres"),
             ("ja", "です"),
             ("ar", "أنت"),
-            ("zh", "你是"),
-            ("tr", "Sen"),
+            ("zh", "您是"),  # formal, like the zh coherence and EH prompts (TRANSLATION_GUIDE: formal address)
+            ("tr", "siz"),  # formal siz (TRANSLATION_GUIDE lists it), as the tr coherence prompt
             ("sw", "Wewe"),
             ("am", "እርስዎ IRIS-E"),  # Amharic uses formal form
         ],

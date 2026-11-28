@@ -228,17 +228,20 @@ def upgrade_command(executable: Optional[str] = None, platform: Optional[str] = 
     return shlex.join(argv)
 
 
-#: A version --to accepts (PEP 440 characters only): it becomes ciris-agent==VERSION on a pip command line.
-_VERSION = re.compile(r"[0-9][0-9A-Za-z.+!-]*")
+def release_version(version: str) -> Optional[str]:
+    """``version`` rebuilt from its integers (2.24.0), or None if it is not a release number.
 
-
-def _requirement(version: Optional[str]) -> str:
-    return f"ciris-agent=={version}" if version else "ciris-agent"
+    The helper does the same; only digits and dots ever reach pip's command line.
+    """
+    parts = version.split(".")
+    if not 1 <= len(parts) <= 4 or not all(p.isdigit() for p in parts):
+        return None
+    return ".".join(str(int(p)) for p in parts)
 
 
 def _start_helper(
     home: Path,
-    requirement: str,
+    version: Optional[str],
     relaunch: Optional[List[str]],
     wait_pid: Optional[int] = None,
     outside_unit: Optional[str] = None,
@@ -254,14 +257,11 @@ def _start_helper(
     log = logs / "upgrade.log"
     helper = Path(tempfile.mkdtemp(prefix="ciris-upgrade-")) / "helper.py"
     shutil.copyfile(Path(__file__).with_name("_upgrade_helper.py"), helper)
-    cmd = [
-        sys.executable,
-        "-I",
-        str(helper),
-        "--python",
-        sys.executable,
-        "--requirement",
-        requirement,
+    # The helper installs into the interpreter that runs it, so it is started by this one.
+    cmd = [sys.executable, "-I", str(helper)]
+    if version:
+        cmd += ["--version", version]
+    cmd += [
         "--wait-pid",
         str(wait_pid or os.getpid()),
         "--log",
@@ -292,41 +292,54 @@ def run_upgrade(argv: List[str], home: Optional[Path] = None) -> int:
 
         home = get_ciris_home()
 
-    if args.to is not None and not _VERSION.fullmatch(args.to):
-        print(f"--to must be a version such as 2.24.0, got {args.to!r}", file=sys.stderr)
+    version = release_version(args.to) if args.to is not None else None
+    if args.to is not None and version is None:
+        print(f"--to must be a release such as 2.24.0, got {args.to!r}", file=sys.stderr)
         return 2
     running = read_running(home)
-    relaunch: Optional[List[str]] = None
     unit = supervised_unit(running) if running else None
     if running and unit:
-        # systemd owns this process: it must stop and start it, or Restart= and the
-        # helper's own relaunch would race pip (ciris-server's Linux installer).
-        pid = int(str(running["pid"]))
-        relaunch = None if args.no_restart else ["systemctl", "--user", "start", unit]
-        try:
-            log = _start_helper(home, _requirement(args.to), relaunch, wait_pid=pid, outside_unit=unit)
-        except OSError as e:
-            print(f"Could not start the upgrade helper: {e}", file=sys.stderr)
-            return 1
-        print(f"Stopping {unit} (pid {pid}) for the upgrade. Progress: {log}")
-        subprocess.run(["systemctl", "--user", "stop", "--no-block", unit], check=False)
-        if relaunch:
-            print(f"{unit} starts again when the upgrade finishes.")
-        return 0
-    if running:
-        pid = int(str(running["pid"]))
-        print(f"Closing CIRIS (pid {pid})...")
-        run_dir(home).mkdir(parents=True, exist_ok=True)
-        stop_flag(home).touch()
-        if not _wait_gone(pid, STOP_DEADLINE_SECS + 5.0):
-            print("CIRIS didn't close in time; ending it.", file=sys.stderr)
-            _end_process_tree(pid, 5.0)
-        saved = running.get("argv")
-        if isinstance(saved, list) and not args.no_restart:
-            relaunch = [str(a) for a in saved]
+        return _upgrade_under_systemd(home, running, unit, version, args.no_restart)
+    relaunch = _close_running(home, running, args.no_restart) if running else None
+    return _hand_to_helper(home, version, relaunch)
 
+
+def _upgrade_under_systemd(
+    home: Path, running: Dict[str, object], unit: str, version: Optional[str], no_restart: bool
+) -> int:
+    """systemd owns this process: it stops and starts it, or Restart= and the helper's relaunch would race pip."""
+    pid = int(str(running["pid"]))
+    relaunch = None if no_restart else ["systemctl", "--user", "start", unit]
     try:
-        log = _start_helper(home, _requirement(args.to), relaunch)
+        log = _start_helper(home, version, relaunch, wait_pid=pid, outside_unit=unit)
+    except OSError as e:
+        print(f"Could not start the upgrade helper: {e}", file=sys.stderr)
+        return 1
+    print(f"Stopping {unit} (pid {pid}) for the upgrade. Progress: {log}")
+    subprocess.run(["systemctl", "--user", "stop", "--no-block", unit], check=False)
+    if relaunch:
+        print(f"{unit} starts again when the upgrade finishes.")
+    return 0
+
+
+def _close_running(home: Path, running: Dict[str, object], no_restart: bool) -> Optional[List[str]]:
+    """Ask the running CIRIS to stop (ending it if it won't). Returns the argv to start it again, if any."""
+    pid = int(str(running["pid"]))
+    print(f"Closing CIRIS (pid {pid})...")
+    run_dir(home).mkdir(parents=True, exist_ok=True)
+    stop_flag(home).touch()
+    if not _wait_gone(pid, STOP_DEADLINE_SECS + 5.0):
+        print("CIRIS didn't close in time; ending it.", file=sys.stderr)
+        _end_process_tree(pid, 5.0)
+    saved = running.get("argv")
+    if isinstance(saved, list) and not no_restart:
+        return [str(a) for a in saved]
+    return None
+
+
+def _hand_to_helper(home: Path, version: Optional[str], relaunch: Optional[List[str]]) -> int:
+    try:
+        log = _start_helper(home, version, relaunch)
     except OSError as e:
         print(f"Could not start the upgrade helper: {e}. CIRIS was closed; start it again.", file=sys.stderr)
         return 1

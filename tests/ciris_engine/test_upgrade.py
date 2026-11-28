@@ -92,7 +92,7 @@ def test_a_dead_recorded_process_is_not_running(tmp_path: Path) -> None:
 def test_upgrade_with_nothing_running_hands_straight_to_the_helper(tmp_path: Path) -> None:
     with patch.object(upgrade, "_start_helper", return_value=tmp_path / "u.log") as helper:
         assert upgrade.run_upgrade(["--to", "2.19.3"], home=tmp_path) == 0
-    helper.assert_called_once_with(tmp_path, "ciris-agent==2.19.3", None)
+    helper.assert_called_once_with(tmp_path, "2.19.3", None)
 
 
 def test_upgrade_stops_the_running_process_and_restarts_it(tmp_path: Path) -> None:
@@ -103,7 +103,7 @@ def test_upgrade_stops_the_running_process_and_restarts_it(tmp_path: Path) -> No
     ):
         assert upgrade.run_upgrade([], home=tmp_path) == 0
     assert upgrade.stop_flag(tmp_path).exists(), "the running process is asked first"
-    helper.assert_called_once_with(tmp_path, "ciris-agent", ["python", "-m", "ciris_engine.cli"])
+    helper.assert_called_once_with(tmp_path, None, ["python", "-m", "ciris_engine.cli"])
 
 
 def test_no_restart_is_honoured(tmp_path: Path) -> None:
@@ -222,7 +222,7 @@ def test_the_helper_uses_pip_where_there_is_pip(tmp_path: Path) -> None:
     from ciris_engine import _upgrade_helper as helper
 
     log = str(tmp_path / "u.log")
-    argv = helper.pip_install_argv(sys.executable, "ciris-agent", log)
+    argv = helper.pip_install_argv(None, log)
     assert argv == [sys.executable, "-m", "pip", "install", "--upgrade", "ciris-agent"]
 
 
@@ -230,38 +230,39 @@ def test_the_helper_falls_back_to_uv_without_pip(tmp_path: Path) -> None:
     from ciris_engine import _upgrade_helper as helper
 
     log = str(tmp_path / "u.log")
-    python = tmp_path / "tools" / "ciris-agent" / "bin" / "python"
-    python.parent.mkdir(parents=True)
-    python.write_text("")
     with patch.object(helper.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)), patch.object(
         helper.shutil, "which", return_value="/usr/bin/uv"
     ):
-        argv = helper.pip_install_argv(str(python), "ciris-agent", log)
-    assert argv == ["/usr/bin/uv", "pip", "install", "--python", str(python), "--upgrade", "ciris-agent"]
+        argv = helper.pip_install_argv("2.24.0", log)
+    assert argv == ["/usr/bin/uv", "pip", "install", "--python", sys.executable, "--upgrade", "ciris-agent==2.24.0"]
     assert "using uv" in Path(log).read_text(encoding="utf-8")
 
 
+def test_the_helper_installs_into_its_own_interpreter() -> None:
+    """No interpreter path is taken from the command line: the helper runs as the Python it upgrades."""
+    from ciris_engine import _upgrade_helper as helper
+
+    source = Path(helper.__file__).read_text(encoding="utf-8")
+    assert "--python\"" not in source.split("def main()")[1]
+
+
 @pytest.mark.parametrize(
-    "python, requirement",
-    [
-        ("python3; rm -rf ~", "ciris-agent"),  # not a path to an executable
-        ("relative/python3", "ciris-agent"),  # not absolute
-        ("{exe}", "ciris-agent --index-url http://evil"),  # an extra pip argument
-        ("{exe}", "requests"),  # another package
-        ("{exe}", "ciris-agent==2.24.0; echo"),
-    ],
+    "version",
+    ["2.24.0 --index-url http://evil", "2.24.0; echo", "requests", "2.24.0rc1", "v2.24.0", "", "1.2.3.4.5"],
 )
-def test_the_helper_runs_only_a_python_and_ciris_agent(tmp_path: Path, python: str, requirement: str) -> None:
+def test_the_helper_installs_only_a_release_of_ciris_agent(version: str) -> None:
     from ciris_engine import _upgrade_helper as helper
 
     with pytest.raises(SystemExit):
-        helper.pip_install_argv(python.format(exe=sys.executable), requirement, str(tmp_path / "u.log"))
+        helper.requirement_for(version)
 
 
-def test_a_pinned_version_is_a_valid_requirement() -> None:
+def test_a_release_version_is_rebuilt_from_its_digits() -> None:
     from ciris_engine import _upgrade_helper as helper
 
-    assert helper.checked_requirement("ciris-agent==2.24.0") == "ciris-agent==2.24.0"
+    assert helper.requirement_for("2.24.0") == "ciris-agent==2.24.0"
+    assert helper.requirement_for("02.24.00") == "ciris-agent==2.24.0"
+    assert helper.requirement_for(None) == "ciris-agent"
 
 
 def test_logging_setup_states_the_install(caplog: pytest.LogCaptureFixture) -> None:
@@ -517,7 +518,7 @@ def test_a_unit_that_does_not_run_this_pid_is_not_trusted(tmp_path: Path, monkey
 def test_the_helper_leaves_the_unit_through_systemd_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     started: list = []
     monkeypatch.setattr(upgrade.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
-    upgrade._start_helper(tmp_path, "ciris-agent", ["systemctl", "--user", "start", "ciris.service"], wait_pid=4242, outside_unit="ciris.service")
+    upgrade._start_helper(tmp_path, None, ["systemctl", "--user", "start", "ciris.service"], wait_pid=4242, outside_unit="ciris.service")
     cmd = started[0]
     assert cmd[:4] == ["systemd-run", "--user", "--collect", "--quiet"]
     assert cmd[4].startswith("--unit=ciris-upgrade-")
@@ -533,3 +534,14 @@ def test_a_version_that_is_not_one_is_refused(tmp_path: Path) -> None:
 def test_a_helper_that_cannot_start_is_a_failure(tmp_path: Path) -> None:
     with patch.object(upgrade, "_start_helper", side_effect=OSError("no python")):
         assert upgrade.run_upgrade([], home=tmp_path) == 1
+
+
+def test_the_helper_is_started_by_this_python_with_only_a_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    started: list = []
+    monkeypatch.setattr(upgrade.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
+    upgrade._start_helper(tmp_path, "2.24.0", None)
+    cmd = started[0]
+    assert cmd[:2] == [sys.executable, "-I"]
+    assert cmd[cmd.index("--version") + 1] == "2.24.0"
+    assert "--python" not in cmd
+    assert "--requirement" not in cmd

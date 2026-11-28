@@ -6,19 +6,19 @@ on Windows anything running from site-packages, or from Scripts\\ciris-agent.exe
 is a file pip can't move. pip then fails part way through (WinError 32) and leaves
 a half-installed agent that dies at import.
 
-    python helper.py --python <exe> --requirement ciris-agent --wait-pid N --log F [--relaunch JSON]
+    python -I helper.py [--version 2.24.0] --wait-pid N --log F --stop-flag F [--relaunch JSON]
+
+It installs into the interpreter that runs it (sys.executable), and takes no path to one.
 """
 
 import argparse
 import json
-import re
 import os
 import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 
 def wait_for_exit(pid: int, timeout_secs: float) -> bool:
@@ -59,36 +59,33 @@ def say(log: str, text: str) -> None:
         out.write(f"[upgrade {time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
 
 
-#: What --requirement may be: ciris-agent, optionally pinned to one version. Nothing else is installed.
-_REQUIREMENT = re.compile(r"ciris-agent(==[0-9][0-9A-Za-z.+!-]*)?")
-#: What --python may be named: a CPython executable (python, python3, python3.12, pythonw, .exe).
-_PYTHON_NAME = re.compile(r"python(w)?(3(\.[0-9]+)?)?(\.exe)?", re.IGNORECASE)
+def normalized_version(version: str) -> str:
+    """``version`` rebuilt from its integers (2.24.0), else SystemExit.
 
-
-def checked_python(python: str) -> str:
-    """``python`` if it is an existing Python executable, else SystemExit. It is passed to subprocess."""
-    path = Path(python)
-    if not path.is_absolute() or not path.is_file() or not _PYTHON_NAME.fullmatch(path.name):
-        raise SystemExit(f"--python must be the absolute path of a Python executable, got {python!r}")
-    return str(path)
-
-
-def checked_requirement(requirement: str) -> str:
-    """``requirement`` if it names ciris-agent (optionally ==VERSION), else SystemExit."""
-    if not _REQUIREMENT.fullmatch(requirement):
-        raise SystemExit(f"--requirement must be ciris-agent or ciris-agent==VERSION, got {requirement!r}")
-    return requirement
-
-
-def pip_install_argv(python: str, requirement: str, log: str) -> List[str]:
-    """The install command for ``python``'s environment.
-
-    ``python -m pip`` where that environment has pip (pip, pipx). A ``uv tool``
-    environment has no pip, so there it is ``uv pip install --python``, which
-    installs into the same environment.
+    Releases are numeric. Rebuilding from int() means no text a caller supplied
+    reaches pip's command line, only digits and dots.
     """
-    python = checked_python(python)
-    requirement = checked_requirement(requirement)
+    parts = version.split(".")
+    if not 1 <= len(parts) <= 4 or not all(p.isdigit() for p in parts):
+        raise SystemExit(f"--version must be a release such as 2.24.0, got {version!r}")
+    return ".".join(str(int(p)) for p in parts)
+
+
+def requirement_for(version: Optional[str]) -> str:
+    """The one package this helper installs: ciris-agent, optionally pinned."""
+    return "ciris-agent" if version is None else f"ciris-agent=={normalized_version(version)}"
+
+
+def pip_install_argv(version: Optional[str], log: str) -> List[str]:
+    """The install command for THIS interpreter's environment.
+
+    The helper is started by the interpreter it upgrades (``python -I helper.py``),
+    so it installs into ``sys.executable`` and takes no interpreter path from its
+    arguments. ``python -m pip`` where that environment has pip (pip, pipx); a
+    ``uv tool`` environment has none, so there it is ``uv pip install --python``.
+    """
+    python = sys.executable
+    requirement = requirement_for(version)
     has_pip = subprocess.run(
         [python, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     ).returncode == 0
@@ -103,8 +100,7 @@ def pip_install_argv(python: str, requirement: str, log: str) -> List[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--python", required=True)
-    ap.add_argument("--requirement", required=True)
+    ap.add_argument("--version", default=None, help="release to install (default: the latest)")
     ap.add_argument("--wait-pid", type=int, required=True)
     ap.add_argument("--log", required=True)
     ap.add_argument("--stop-flag", required=True)
@@ -115,10 +111,10 @@ def main() -> int:
     if not wait_for_exit(args.wait_pid, 30.0):
         say(args.log, "it did not exit; not upgrading over a running CIRIS")
         return 1
-    rc = run(pip_install_argv(args.python, args.requirement, args.log), args.log)
+    rc = run(pip_install_argv(args.version, args.log), args.log)
     say(args.log, f"pip exited {rc}")
     # Clears any ~iris* leftovers from an earlier failed upgrade (ciris-server >= 0.5.245).
-    run([args.python, "-m", "ciris_server.upgrade", "--repair"], args.log)
+    run([sys.executable, "-m", "ciris_server.upgrade", "--repair"], args.log)
     try:
         os.remove(args.stop_flag)
     except OSError:

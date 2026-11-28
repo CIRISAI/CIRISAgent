@@ -811,6 +811,37 @@ def refuse_batch_mode(argv: Sequence[str]) -> None:
         prev = a
 
 
+def kept_without_overwrite(
+    stage: Path, patterns: Sequence[str], langs: Sequence[str], en: Dict[str, Dict[str, str]]
+) -> Dict[str, List[str]]:
+    """``{lang: keys}`` a translate run would draft and review, then KEEP (they already have a value).
+
+    With ``--keys`` and no ``--overwrite``, localize.py translates and reviews every selected key, then
+    keeps the existing value: paid for, never written. Run 46093145549 (2026-11-28) spent $22.07 that way
+    and wrote nothing. A selection like that is refused before anything is spent.
+    """
+    import fnmatch
+
+    keys = sorted(k for k in flat(en) if any(fnmatch.fnmatch(k, p) for p in patterns))
+    out: Dict[str, List[str]] = {}
+    for lang in langs:
+        path = stage / f"{lang}.json"
+        have = flat(json.loads(path.read_text(encoding="utf-8"))) if path.is_file() else {}
+        kept = [k for k in keys if k in have]
+        if kept:
+            out[lang] = kept
+    return out
+
+
+def _selected(rest: Sequence[str]) -> Tuple[List[str], bool]:
+    """The ``--keys`` patterns and ``--overwrite`` flag passed through to localize.py."""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--keys", action="append", default=[])
+    p.add_argument("--overwrite", action="store_true")
+    known, _ = p.parse_known_args(list(rest))
+    return list(known.keys), bool(known.overwrite)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     ap.add_argument("--verify", action="store_true", help="gate the committed locale prompts, then exit")
@@ -866,7 +897,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     refuse_batch_mode(rest)
     with tempfile.TemporaryDirectory(prefix="ciris-prompt-stage-") as tmp:
         stage = args.stage or Path(tmp)
-        build_stage(stage)
+        en = build_stage(stage)
+        patterns, overwrite = _selected(rest)
+        if args.lane == "translate" and patterns and not overwrite and not args.check:
+            kept = kept_without_overwrite(stage, patterns, args.lang or languages()[1:], en)
+            if kept:
+                n = sum(len(v) for v in kept.values())
+                sample = "; ".join(f"{lang}: {', '.join(keys[:3])}" for lang, keys in list(kept.items())[:3])
+                print(
+                    f"[refuse] {n} selected key-value(s) already have a translation ({sample}"
+                    f"{' ...' if len(kept) > 3 else ''}). Without --overwrite the lane would translate and review "
+                    "them, then keep the old values: paid for, never written. Pass --overwrite (workflow input "
+                    "overwrite: true) to replace them, or narrow --keys / --lang to what is missing."
+                )
+                return 2
         L = import_localize(stage)
         # The agent's own UI strings are always in reach; the website and the
         # client need a checkout (CI pins both, see i18n-lane.yml).

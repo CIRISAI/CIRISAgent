@@ -309,7 +309,8 @@ def test_a_conscience_field_a_locale_lacks_is_offered_to_the_lane(tmp_path: Path
 
 
 def test_the_dry_run_lists_the_conscience_positions_for_all_28_locales(capsys: pytest.CaptureFixture[str]) -> None:
-    PL.main(["--lane", "translate", "--keys", "*_conscience.pipeline_position", "--dry-run"])
+    # --overwrite: the positions are translated now, and without it the keep-only guard refuses the selection.
+    PL.main(["--lane", "translate", "--keys", "*_conscience.pipeline_position", "--overwrite", "--dry-run"])
     out = capsys.readouterr().out
     assert "lane=translate  84 key-value(s) across 28 language(s)" in out
     for lang in PL.languages()[1:]:
@@ -537,3 +538,49 @@ def test_a_resplit_pair_already_done_in_a_locale_is_not_redone(two_roots: list, 
     PL.build_stage(tmp_path / "stage", two_roots)
     es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
     assert {"system_prompt", "system_prompt_tail"} <= set(es["coh_conscience"])  # counted as translated
+
+
+# ──────────────────────────────────────────────
+# A run that could only pay and keep is refused before it spends (run 46093145549: $22.07, 0 written)
+# ──────────────────────────────────────────────
+
+
+def test_selecting_translated_keys_without_overwrite_is_named(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    kept = PL.kept_without_overwrite(tmp_path / "stage", ["coh_conscience.system_prompt"], ["es"], en)
+    assert kept == {"es": ["coh_conscience.system_prompt"]}  # es already holds a translation
+
+
+def test_selecting_only_missing_keys_is_not_refused(two_roots: list, tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path / "stage", two_roots)
+    # demo's es copy is the English one, so every demo field is missing: nothing would be kept.
+    assert PL.kept_without_overwrite(tmp_path / "stage", ["demo.*"], ["es"], en) == {}
+
+
+def test_the_lane_refuses_a_keep_only_run_and_spends_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+    before = _localized_snapshot()
+    rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--dry-run"])
+    assert rc == 2 and "[refuse]" in capsys.readouterr().out
+    assert _localized_snapshot() == before
+
+
+def test_overwrite_lets_the_same_selection_through(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = PL.main(["--lane", "translate", "--keys", "entropy_conscience.system_prompt", "--lang", "es", "--overwrite", "--dry-run"])
+    assert rc == 0 and "[refuse]" not in capsys.readouterr().out
+
+
+def test_the_ui_lane_refuses_a_keep_only_run_too() -> None:
+    import importlib.util
+
+    import lane_backoff as LB  # noqa: E402
+
+    # A fresh copy: the prompts target repoints the shared module's CANONICAL at its stage.
+    spec = importlib.util.spec_from_file_location("localize_ui_fresh", REPO / "localization" / "localize.py")
+    assert spec and spec.loader
+    L = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(L)
+    L.CANONICAL = L.REPO_ROOT / L.guard.UI_BUNDLE  # LOCALIZE_TARGET may be left at prompts by an earlier test
+
+    assert LB.keep_only_refusal(L, ["--lane", "translate", "--keys", "nav.*", "--lang", "es"])
+    assert LB.keep_only_refusal(L, ["--lane", "translate", "--keys", "nav.*", "--lang", "es", "--overwrite"]) is None
+    assert LB.keep_only_refusal(L, ["--lane", "evaluate", "--keys", "nav.*", "--lang", "es"]) is None
